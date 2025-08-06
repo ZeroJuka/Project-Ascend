@@ -1,0 +1,61 @@
+
+===========================================================
+NOME DO APP: ASCEND 
+NOME DA IA: ATLAS
+===========================================================
+
+PLANO: 
+1. Planejamento dos Requisitos Funcionais e Não Funcionais
+2. Arquitetura do Projeto
+3. Criação do Projeto 
+4. Desenvolvimento do App
+5. Testes e Correções
+6. Lançamento do Aplicativo
+7. Manutenção e Atualizações
+8. Expansão e Adição de Funcionalidades
+
+
+DESCRIÇÃO DO PROJETO:
+    O projeto ASCEND é um aplicativo mobile de gestão financeira pessoal
+para administrar tanto grandes custos e dívidas quanto pequenas porém 
+indispensáveis despesas, oferecendo uma solução completa e integrada 
+para a gestão financeira, no formato de um assistente virtual utilizando
+modelos de LLM como o Google Gemini ou o GPT 4o para classificação,
+análise e predição de gastos, além da otimização de orçamento e 
+planejamento financeiro em comparação com períodos anteriores,
+permitindo e auxiliando no estabelecimento de metas financeiras,
+fornecendo dicas e sugestões para alcançar esses objetivos.
+    O aplicativo também fornecerá insights sobre os gastos do usuário,
+identificando padrões e tendências, e sugerindo locais ideais para
+reduzir custos, como deslocamento, alimentação e entretenimento 
+além de ser capaz de oferecer dicas e sugestões para otimizar o uso 
+dos recursos financeiros, como a redução de gastos em categorias
+específicas, como alimentação e entretenimento, e a maximização do uso
+de recursos financeiros em caso de uma Meta estar definida.
+    Como diferencial o aplicativo deve oferecer um serviço de comunicação
+com o agente de IA que permite que o aplicativo cadastre finanças, gastos,
+custos, metas e tudo mais através de um pedido verbal do usuário para o agente
+de IA, que irá processar o pedido e executar as ações necessárias.
+
+
+REQUISITOS FUNCIONAIS:
+- Compatibilidade com os principais sistemas operacionais Android e iOS
+- Registro e Autenticação de Usuários
+- Cadastro e Gerenciamento de Contas Bancárias
+- Registro e Gerenciamento de Transações Financeiras / Despesas / Custos
+- Categorização e organização de finanças auxiliada por IA
+- Segurança e Privacidade
+- Relatórios e Análises Financeiras
+- Notificações e Lembretes sobre metas
+- Acesso Offline
+
+
+FUNCIONALIDADES ADICIONAIS:
+- Chatbot para suporte ao usuário
+- Notificações push
+- Compartilhamento de dados entre dispositivos
+- Modo Família para compartilhamento de finanças (Atualização da "Família" Impedida no modo Offline até que a conexão seja restaurada")
+- Modo Noturno
+- Opção de idioma (Inglês / Espanhol / Português)
+- Opção de configuração de notificação / categoria / transação / relatório / lembrete / segurança / privacidade
+- Backup e Recuperação de dados
