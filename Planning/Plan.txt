@@ -59,3 +59,73 @@ FUNCIONALIDADES ADICIONAIS:
 - Opção de idioma (Inglês / Espanhol / Português)
 - Opção de configuração de notificação / categoria / transação / relatório / lembrete / segurança / privacidade
 - Backup e Recuperação de dados
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Projeto ASCEND: Escopo Focado em Clareza e Diagnóstico Financeiro
+DESCRIÇÃO DO PROJETO:
+O projeto ASCEND é um aplicativo mobile de gestão financeira pessoal focado em clareza e objetividade. A sua missão principal é ajudar o usuário a organizar suas finanças e, principalmente, identificar de forma rápida e intuitiva os pontos problemáticos em seu orçamento.
+
+Diferente de assistentes complexos, o ASCEND atua como um motor inteligente nos bastidores. Ele utiliza um modelo de IA (como Gemini ou outro) para automatizar a categorização de despesas, eliminando a necessidade de preenchimento manual extensivo. O foco da interface não é a conversa com uma IA, mas sim a apresentação limpa e visual dos dados, permitindo que o usuário entenda para onde seu dinheiro está indo com apenas uma olhada.
+
+O aplicativo se concentrará em dashboards visuais e relatórios simplificados que destacam padrões de gastos, excessos em categorias específicas e desvios do planejamento financeiro. O objetivo final é capacitar o usuário a tomar decisões informadas e corrigir o curso de suas finanças de maneira proativa.
+
+REQUISITOS FUNCIONAIS (Priorizados para o TCC):
+Estes são os requisitos essenciais para entregar a proposta de valor principal.
+
+-Registro Rápido e Simplificado de Transações: A interface para adicionar uma despesa ou receita deve ser minimalista e extremamente rápida de usar, incentivando o registro imediato.
+
+-Categorização Inteligente e Automática (Core da IA):
+
+Ao registrar uma despesa (ex: "Almoço no restaurante X"), a IA sugere automaticamente a categoria "Alimentação".
+
+O sistema aprende com as correções do usuário, tornando-se mais preciso com o tempo.
+
+O usuário pode criar e gerenciar suas próprias categorias.
+
+-Dashboard Principal e Objetivo: A tela inicial do app, que deve apresentar de forma visual e imediata:
+
+Um resumo do balanço do mês (Receitas vs. Despesas).
+
+Gráficos (ex: pizza ou barras) mostrando as principais categorias de gastos.
+
+Alertas visuais para orçamentos próximos do limite ou já excedidos.
+
+-Relatórios Visuais para Análise de Problemas:
+
+Relatórios que comparam os gastos do mês atual com os meses anteriores por categoria.
+
+Filtros para visualizar despesas por categoria, período de tempo ou tipo (essencial vs. supérfluo).
+
+O foco é responder à pergunta: "Onde eu gastei mais este mês em comparação com o mês passado?".
+
+-Definição e Acompanhamento de Orçamentos:
+
+Permitir que o usuário defina um limite de gasto mensal para categorias específicas (ex: R$ 500 para "Lazer").
+
+O aplicativo exibirá barras de progresso claras para cada orçamento.
+
+-Registro e Autenticação de Usuários: Garantir que os dados de cada usuário sejam privados e seguros.
+
+-Segurança e Privacidade: Criptografia dos dados sensíveis do usuário.
+
+-Compatibilidade Base (Android ou iOS): Para um TCC, pode ser estratégico focar em apenas uma plataforma (Android, por ser mais acessível para desenvolvimento inicial) e declarar a outra como um passo futuro.
+
+FUNCIONALIDADES ADICIONAIS (Sugestão de Prioridade):
+Alta Prioridade (Melhoram a Experiência Principal):
+
+Modo Noturno: Essencial para uma boa experiência de usuário e contribui para a sensação de "app limpo".
+
+Notificações e Lembretes: Apenas para alertas críticos, como "Você atingiu 80% do seu orçamento de Alimentação". Manter as notificações minimalistas.
+
+Backup e Recuperação de Dados: Um recurso importante para garantir a confiança do usuário.
+
+Baixa Prioridade (Para futuras versões pós-TCC):
+
+Chatbot para suporte ao usuário: A complexidade é alta e o foco deve ser em um app tão intuitivo que não precise de um chatbot.
+
+Comunicação Verbal com IA: Foge completamente do novo escopo focado em objetividade visual. É uma complexidade técnica muito grande para a proposta de valor refinada.
+
+Modo Família: Adiciona uma camada de complexidade de compartilhamento de dados que pode ser implementada no futuro.
+
+Acesso Offline Completo: O registro offline de despesas pode ser mantido, mas a sincronização e categorização por IA dependerão de conexão, o que é aceitável para este escopo.
