@@ -16,10 +16,10 @@
     "@rneui/themed": "^4.0.0-rc.8",
     "@supabase/supabase-js": "^2.54.0",
     "expo": "~53.0.20",
+    "expo-linear-gradient": "^14.1.5",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
     "react-native": "0.79.5",
-    "react-native-dotenv": "^3.4.11",
     "react-native-safe-area-context": "^5.6.0",
     "react-native-screens": "^4.13.1",
     "react-native-url-polyfill": "^2.0.0"
@@ -27,6 +27,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
+    "react-native-dotenv": "^3.4.11",
     "typescript": "~5.8.3"
   },
   "private": true

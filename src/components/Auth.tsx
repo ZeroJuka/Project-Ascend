@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { Alert, StyleSheet, View, Text, TouchableOpacity, Animated, Dimensions } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Button, Input } from '@rneui/themed';
 
@@ -8,10 +8,20 @@ interface AuthProps {
 }
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
+  const [slideAnim] = useState(new Animated.Value(0));
+  const screenWidth = Dimensions.get('window').width;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+
+  const toggleMode = () => {
+    Animated.spring(slideAnim, {
+      toValue: isLogin ? screenWidth * 0.8 : 0,
+      useNativeDriver: true,
+    }).start();
+    setIsLogin(!isLogin);
+  };
 
   async function signInWithEmail() {
     if (!email || !password) {
@@ -60,7 +70,23 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{isLogin ? 'Login' : 'Cadastro'}</Text>
+      <View style={styles.modeSelector}>
+        <Animated.View 
+          style={[styles.modeSelectorSlider, { transform: [{ translateX: slideAnim }] }]} 
+        />
+        <TouchableOpacity 
+          style={[styles.modeButton, isLogin && styles.activeMode]} 
+          onPress={() => !isLogin && toggleMode()}
+        >
+          <Text style={[styles.modeButtonText, isLogin && styles.activeModeText]}>Login</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.modeButton, !isLogin && styles.activeMode]} 
+          onPress={() => isLogin && toggleMode()}
+        >
+          <Text style={[styles.modeButtonText, !isLogin && styles.activeModeText]}>Cadastro</Text>
+        </TouchableOpacity>
+      </View>
       
       <View style={styles.formContainer}>
         <Input
@@ -89,18 +115,9 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           title={isLogin ? 'Entrar' : 'Cadastrar'}
           disabled={loading}
           onPress={isLogin ? signInWithEmail : signUpWithEmail}
-          buttonStyle={styles.button}
+          buttonStyle={[styles.button, { backgroundColor: isLogin ? '#4ADE80' : '#34D399' }]}
           loading={loading}
         />
-        
-        <TouchableOpacity 
-          onPress={() => setIsLogin(!isLogin)} 
-          style={styles.switchMode}
-        >
-          <Text style={styles.switchText}>
-            {isLogin ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Entre'}
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -111,27 +128,50 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+    backgroundColor: '#1F2937',
   },
-  title: {
-    fontSize: 24,
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#374151',
+    borderRadius: 25,
+    marginBottom: 30,
+    position: 'relative',
+    height: 50,
+  },
+  modeSelectorSlider: {
+    position: 'absolute',
+    width: '50%',
+    height: '100%',
+    backgroundColor: '#4ADE80',
+    borderRadius: 25,
+  },
+  modeButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  modeButtonText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    fontWeight: '600',
+  },
+  activeMode: {
+    backgroundColor: 'transparent',
+  },
+  activeModeText: {
+    color: '#1F2937',
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
   },
   formContainer: {
     width: '100%',
+    backgroundColor: '#374151',
+    padding: 20,
+    borderRadius: 15,
   },
   button: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 5,
-    marginTop: 10,
-  },
-  switchMode: {
+    borderRadius: 25,
     marginTop: 20,
-    alignItems: 'center',
-  },
-  switchText: {
-    color: '#4A90E2',
-    fontSize: 16,
+    height: 50,
   },
 });

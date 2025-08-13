@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme } from 'react-native';
+import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme, Animated, Pressable, Image } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +18,41 @@ export default function HomeScreen() {
   };
 
   const isDarkMode = useColorScheme() === 'dark';
+
+  const [buttonScale] = React.useState(new Animated.Value(1));
+  const [buttonGlow] = React.useState(new Animated.Value(0));
+
+  const handlePressIn = () => {
+    Animated.parallel([
+      Animated.spring(buttonScale, {
+        toValue: 1.1,
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(buttonGlow, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(buttonGlow, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ),
+    ]).start();
+  };
+
+  const handlePressOut = () => {
+    buttonGlow.stopAnimation();
+    Animated.spring(buttonScale, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+    navigation.navigate('Chat' as never);
+  };
 
   const navigationButtons = [
     { icon: 'wallet-outline', label: 'Transações', color: '#4ADE80' },
@@ -50,11 +86,42 @@ export default function HomeScreen() {
           </View>
         </View>
         
-        <TouchableOpacity 
-          style={[styles.signOutButton, isDarkMode && styles.darkSignOutButton]} 
-          onPress={handleSignOut}
-        >
-          <Text style={[styles.signOutButtonText, isDarkMode && styles.darkText]}>Sair</Text>
+      </View>
+
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.navButton}>
+          <Ionicons name="person-outline" size={24} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={styles.centerButtonContainer}>
+          <Animated.View
+            style={[{
+              transform: [{ scale: buttonScale }],
+              opacity: buttonGlow.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 0.8],
+              }),
+            }]}
+          >
+            <Pressable
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+            >
+              <LinearGradient
+                colors={['#4ADE80', '#34D399']}
+                style={styles.centerButton}
+              >
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={styles.centerButtonIcon}
+                />
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
+        </View>
+
+        <TouchableOpacity style={styles.navButton}>
+          <Ionicons name="settings-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -147,5 +214,35 @@ const styles = StyleSheet.create({
   },
   darkSubtext: {
     color: '#9CA3AF',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#374151',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  centerButtonContainer: {
+    marginTop: -40,
+  },
+  centerButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  centerButtonIcon: {
+    width: 30,
+    height: 30,
+    tintColor: '#fff',
   },
 });
