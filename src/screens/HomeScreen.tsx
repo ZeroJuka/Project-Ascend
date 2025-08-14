@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme, Animated, Pressable, Image } from 'react-native';
+import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -21,8 +23,74 @@ export default function HomeScreen() {
 
   const [buttonScale] = React.useState(new Animated.Value(1));
   const [buttonGlow] = React.useState(new Animated.Value(0));
+  const [isListening, setIsListening] = React.useState(false);
+  const [transcribedText, setTranscribedText] = React.useState('');
+  const recording = useRef<Audio.Recording | undefined>(undefined);
+  const floatingLetters = useRef<Animated.Value[]>([]);
+  const longPressTimeout = useRef<Audio.Recording | undefined>(undefined);
+
+  useEffect(() => {
+    if (transcribedText) {
+      floatingLetters.current = transcribedText.split('').map(() => new Animated.Value(0));
+      animateLetters();
+    }
+  }, [transcribedText]);
+
+  const animateLetters = () => {
+    const animations = floatingLetters.current.map((value, index) => {
+      return Animated.sequence([
+        Animated.delay(index * 100),
+        Animated.spring(value, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]);
+    });
+    Animated.parallel(animations).start();
+  };
+
+  const startRecording = async () => {
+    try {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recording.current = newRecording;
+      setTranscribedText('Ouvindo...');
+    } catch (err) {
+      console.error('Falha ao iniciar gravação:', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording.current) return;
+
+    try {
+      await recording.current.stopAndUnloadAsync();
+      const uri = recording.current.getURI();
+      recording.current = undefined;
+
+      // Aqui você pode implementar a chamada para a API de transcrição
+      // Por enquanto, vamos simular uma resposta
+      setTranscribedText('Exemplo de transcrição de áudio');
+    } catch (err) {
+      console.error('Falha ao parar gravação:', err);
+    }
+  };
 
   const handlePressIn = () => {
+    const timeoutId = setTimeout(() => {
+      setIsListening(true);
+      startRecording();
+    }, 2000);
+    (longPressTimeout as any).current = timeoutId;
     Animated.parallel([
       Animated.spring(buttonScale, {
         toValue: 1.1,
@@ -46,12 +114,21 @@ export default function HomeScreen() {
   };
 
   const handlePressOut = () => {
+    if (longPressTimeout.current) {
+      clearTimeout(longPressTimeout.current as unknown as number);
+    }
+
+    if (isListening) {
+      stopRecording();
+      setIsListening(false);
+    } else {
     buttonGlow.stopAnimation();
     Animated.spring(buttonScale, {
       toValue: 1,
       useNativeDriver: true,
     }).start();
     navigation.navigate('Chat' as never);
+    }
   };
 
   const navigationButtons = [
@@ -64,6 +141,40 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.container, isDarkMode && styles.darkContainer]}>
       <View style={styles.content}>
+        {transcribedText && (
+          <View style={styles.transcriptionContainer}>
+            {transcribedText.split('').map((letter, index) => (
+              <Animated.Text
+                key={index}
+                style={[
+                  styles.floatingLetter,
+                  {
+                    transform: [
+                      {
+                        translateY: floatingLetters.current[index]?.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }) || 0,
+                      },
+                      {
+                        scale: floatingLetters.current[index]?.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.5, 1],
+                        }) || 1,
+                      },
+                    ],
+                    opacity: floatingLetters.current[index]?.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 1],
+                    }) || 0,
+                  },
+                ]}
+              >
+                {letter}
+              </Animated.Text>
+            ))}
+          </View>
+        )}
         <Text style={[styles.title, isDarkMode && styles.darkText]}>ASCEND</Text>
         <Text style={[styles.subtitle, isDarkMode && styles.darkSubtext]}>Bem-vindo ao seu assistente financeiro</Text>
         
@@ -244,5 +355,25 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     tintColor: '#fff',
+  },
+  transcriptionContainer: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 10,
+  },
+  floatingLetter: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4ADE80',
+    marginHorizontal: 2,
+    textShadowColor: '#34D399',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
 });
