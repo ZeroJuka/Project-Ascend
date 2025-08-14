@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme, Animated, Pressable, Image } from 'react-native';
+import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme, Animated, Pressable, Image, Modal } from 'react-native';
 import { audioManager } from '../lib/audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,9 +24,12 @@ export default function HomeScreen() {
   const [buttonGlow] = useState(new Animated.Value(0));
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+  const [textOpacity] = useState(new Animated.Value(1));
+  const [showUserProfile, setShowUserProfile] = useState(false);
   const animationInterval = useRef<NodeJS.Timeout | null>(null);
   const floatingLetters = useRef<Animated.Value[]>([]);
   const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
+  const fadeOutTimeout = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
     if (transcribedText) {
@@ -35,13 +38,50 @@ export default function HomeScreen() {
       
       if (isListening && transcribedText === 'Ouvindo...') {
         startContinuousAnimation();
+        Animated.parallel([
+          Animated.spring(buttonScale, {
+            toValue: 1.6, 
+            useNativeDriver: true,
+          }),
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(buttonGlow, {
+                toValue: 1,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+              Animated.timing(buttonGlow, {
+                toValue: 0.5,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+            ])
+          ),
+        ]).start();
       } else {
         stopContinuousAnimation();
+        textOpacity.setValue(1);
+        
+        if (fadeOutTimeout.current) {
+          clearTimeout(fadeOutTimeout.current);
+        }
+        
+        // Iniciar o desaparecimento gradual após 5 segundos
+        fadeOutTimeout.current = setTimeout(() => {
+          Animated.timing(textOpacity, {
+            toValue: 0,
+            duration: 1000, 
+            useNativeDriver: true,
+          }).start();
+        }, 5000); 
       }
     }
     
     return () => {
       stopContinuousAnimation();
+      if (fadeOutTimeout.current) {
+        clearTimeout(fadeOutTimeout.current);
+      }
     };
   }, [transcribedText, isListening]);
 
@@ -107,6 +147,8 @@ export default function HomeScreen() {
       setIsListening(true);
       startRecording();
     }, 2000);
+    
+    // Animação inicial ao pressionar
     Animated.parallel([
       Animated.spring(buttonScale, {
         toValue: 1.1,
@@ -138,13 +180,20 @@ export default function HomeScreen() {
       stopRecording();
       stopContinuousAnimation();
       setIsListening(false);
+      
+      // Retornar o botão ao tamanho normal quando parar de ouvir
+      Animated.spring(buttonScale, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+      buttonGlow.stopAnimation();
     } else {
-    buttonGlow.stopAnimation();
-    Animated.spring(buttonScale, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-    navigation.navigate('Chat' as never);
+      buttonGlow.stopAnimation();
+      Animated.spring(buttonScale, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+      navigation.navigate('Chat' as never);
     }
   };
 
@@ -159,38 +208,17 @@ export default function HomeScreen() {
     <SafeAreaView style={[styles.container, isDarkMode && styles.darkContainer]}>
       <View style={styles.content}>
         {transcribedText && (
-          <View style={styles.transcriptionContainer}>
-            {transcribedText.split('').map((letter, index) => (
-              <Animated.Text
-                key={index}
-                style={[
-                  styles.floatingLetter,
-                  {
-                    transform: [
-                      {
-                        translateY: floatingLetters.current[index]?.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [20, 0],
-                        }) || 0,
-                      },
-                      {
-                        scale: floatingLetters.current[index]?.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.5, 1],
-                        }) || 1,
-                      },
-                    ],
-                    opacity: floatingLetters.current[index]?.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 1],
-                    }) || 0,
-                  },
-                ]}
-              >
-                {letter}
-              </Animated.Text>
-            ))}
-          </View>
+          <Animated.View 
+            style={[
+              styles.transcriptionContainer, 
+              { opacity: textOpacity },
+              { pointerEvents: 'none' } // Torna o componente intangível
+            ]}
+          >
+            <Animated.Text style={styles.transcribedTextComplete}>
+              {transcribedText}
+            </Animated.Text>
+          </Animated.View>
         )}
         <Text style={[styles.title, isDarkMode && styles.darkText]}>ASCEND</Text>
         <Text style={[styles.subtitle, isDarkMode && styles.darkSubtext]}>Bem-vindo ao seu assistente financeiro</Text>
@@ -217,7 +245,10 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navButton}>
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={() => setShowUserProfile(true)}
+        >
           <Ionicons name="person-outline" size={24} color="#fff" />
         </TouchableOpacity>
 
@@ -225,10 +256,12 @@ export default function HomeScreen() {
           <Animated.View
             style={[{
               transform: [{ scale: buttonScale }],
-              opacity: buttonGlow.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 0.8],
-              }),
+              opacity: 1,
+              shadowColor: isListening ? '#4ADE80' : '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: isListening ? 0.8 : 0.25,
+              shadowRadius: isListening ? 10 : 3.84,
+              elevation: isListening ? 8 : 5,
             }]}
           >
             <Pressable
@@ -236,7 +269,7 @@ export default function HomeScreen() {
               onPressOut={handlePressOut}
             >
               <LinearGradient
-                colors={['#4ADE80', '#34D399']}
+                colors={isListening ? ['#4ADE80', '#10B981'] : ['#4ADE80', '#34D399']}
                 style={styles.centerButton}
               >
                 <Image
@@ -248,10 +281,45 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
 
-        <TouchableOpacity style={styles.navButton}>
+        <TouchableOpacity style={styles.settingsButton}>
           <Ionicons name="settings-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* Modal do Perfil do Usuário */}
+      <Modal
+        visible={showUserProfile}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowUserProfile(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.userProfileCard}>
+            <View style={styles.userProfileHeader}>
+              <Text style={styles.userProfileTitle}>Perfil do Usuário</Text>
+              <TouchableOpacity onPress={() => setShowUserProfile(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.userProfileContent}>
+              <View style={styles.userAvatar}>
+                <Ionicons name="person" size={50} color="#4ADE80" />
+              </View>
+              <Text style={styles.userName}>Usuário</Text>
+              <Text style={styles.userEmail}>usuario@exemplo.com</Text>
+              
+              <TouchableOpacity 
+                style={styles.logoutButton}
+                onPress={handleSignOut}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#fff" />
+                <Text style={styles.logoutButtonText}>Sair</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -375,14 +443,24 @@ const styles = StyleSheet.create({
   },
   transcriptionContainer: {
     position: 'absolute',
-    top: '40%',
+    top: '75%', // Posicionado mais próximo ao botão Atlas
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
     padding: 20,
     zIndex: 10,
+    alignItems: 'center',
+    maxWidth: '100%',
+  },
+  transcribedTextComplete: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'center',
+    textShadowColor: '#34D399',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    flexWrap: 'wrap',
+    maxWidth: '90%',
   },
   floatingLetter: {
     fontSize: 24,
@@ -392,5 +470,72 @@ const styles = StyleSheet.create({
     textShadowColor: '#34D399',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
+  },
+  // Novos estilos
+  profileButton: {
+    padding: 10,
+  },
+  settingsButton: {
+    padding: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  userProfileCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    minHeight: 300,
+  },
+  userProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  userProfileTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  userProfileContent: {
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  userEmail: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
 });

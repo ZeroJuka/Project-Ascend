@@ -1,24 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, StyleSheet, View, Text, TouchableOpacity, Animated, Dimensions } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Button, Input } from '@rneui/themed';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface AuthProps {
   onAuthSuccess?: () => void;
+  initialMode?: 'login' | 'register';
 }
 
-export default function Auth({ onAuthSuccess }: AuthProps) {
-  const [slideAnim] = useState(new Animated.Value(0));
+export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps) {
+  const [slideAnim] = useState(new Animated.Value(initialMode === 'login' ? 0 : Dimensions.get('window').width * 0.4));
   const screenWidth = Dimensions.get('window').width;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(initialMode === 'login');
+
+  useEffect(() => {
+    // Ajusta a posição inicial com base no modo
+    slideAnim.setValue(isLogin ? 0 : screenWidth * 0.4);
+  }, []);
 
   const toggleMode = () => {
     Animated.spring(slideAnim, {
-      toValue: isLogin ? screenWidth * 0.8 : 0,
+      toValue: isLogin ? screenWidth * 0.45 : 0,
       useNativeDriver: true,
+      friction: 8,
+      tension: 40
     }).start();
     setIsLogin(!isLogin);
   };
@@ -61,6 +70,12 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     } else if (!data.session) {
       Alert.alert('Cadastro realizado', 'Por favor, verifique seu email para confirmar o cadastro!');
       setIsLogin(true);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 40
+      }).start();
     } else if (onAuthSuccess) {
       onAuthSuccess();
     }
@@ -91,32 +106,47 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
       <View style={styles.formContainer}>
         <Input
           label="Email"
-          leftIcon={{ type: 'font-awesome', name: 'envelope' }}
+          labelStyle={styles.inputLabel}
+          leftIcon={{ type: 'font-awesome', name: 'envelope', color: '#9CA3AF' }}
           onChangeText={(text) => setEmail(text)}
           value={email}
           placeholder="email@exemplo.com"
           autoCapitalize="none"
           keyboardType="email-address"
           textContentType="emailAddress"
+          inputStyle={styles.inputText}
+          containerStyle={styles.inputContainer}
         />
         
         <Input
           label="Senha"
-          leftIcon={{ type: 'font-awesome', name: 'lock' }}
+          labelStyle={styles.inputLabel}
+          leftIcon={{ type: 'font-awesome', name: 'lock', color: '#9CA3AF' }}
           onChangeText={(text) => setPassword(text)}
           value={password}
           secureTextEntry
           placeholder="Senha"
           autoCapitalize="none"
           textContentType="password"
+          inputStyle={styles.inputText}
+          containerStyle={styles.inputContainer}
         />
         
         <Button
           title={isLogin ? 'Entrar' : 'Cadastrar'}
           disabled={loading}
           onPress={isLogin ? signInWithEmail : signUpWithEmail}
-          buttonStyle={[styles.button, { backgroundColor: isLogin ? '#4ADE80' : '#34D399' }]}
+          buttonStyle={styles.button}
           loading={loading}
+          loadingProps={{ color: '#1F2937' }}
+          ViewComponent={LinearGradient as any}
+          linearGradientProps={{
+            colors: ['#4ADE80', '#34D399'],
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 0 }
+          }}
+          titleStyle={styles.buttonText}
+          disabledStyle={styles.buttonDisabled}
         />
       </View>
     </View>
@@ -128,7 +158,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
-    backgroundColor: '#1F2937',
   },
   modeSelector: {
     flexDirection: 'row',
@@ -137,6 +166,11 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     position: 'relative',
     height: 50,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   modeSelectorSlider: {
     position: 'absolute',
@@ -144,6 +178,11 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#4ADE80',
     borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 4,
   },
   modeButton: {
     flex: 1,
@@ -168,10 +207,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     padding: 20,
     borderRadius: 15,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  inputContainer: {
+    marginBottom: 10,
+  },
+  inputLabel: {
+    color: '#D1D5DB',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  inputText: {
+    color: '#F9FAFB',
   },
   button: {
     borderRadius: 25,
     marginTop: 20,
     height: 50,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  buttonText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  buttonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
   },
 });
