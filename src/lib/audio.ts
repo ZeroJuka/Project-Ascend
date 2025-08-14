@@ -147,25 +147,12 @@ class AudioManager {
       
       const response = await fetch(uri);
       const audioBlob = await response.blob();
-      
-      let contentType = 'audio/mpeg';
-      if (uri.endsWith('.mp4')) {
-        contentType = 'audio/mp4';
-      } else if (uri.endsWith('.m4a')) {
-        contentType = 'audio/mp4'; 
-      } else if (uri.endsWith('.wav')) {
-        contentType = 'audio/wav';
-      } else if (uri.endsWith('.webm')) {
-        contentType = 'audio/webm';
-      }
-      
-      console.info('Using content type:', contentType, 'for URI:', uri);
-      
+
       const apiResponse = await fetch(whisperUri, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${whisperToken}`,
-          'Content-Type': contentType,
+          'Content-Type': 'audio/wav',
         },
         body: audioBlob,
       });
