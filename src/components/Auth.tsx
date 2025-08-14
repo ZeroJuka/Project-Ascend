@@ -18,7 +18,6 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
 
   useEffect(() => {
-    // Ajusta a posição inicial com base no modo
     slideAnim.setValue(isLogin ? 0 : screenWidth * 0.4);
   }, []);
 
