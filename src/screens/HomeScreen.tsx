@@ -1,7 +1,6 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, useColorScheme, Animated, Pressable, Image } from 'react-native';
-import { Audio } from 'expo-av';
-import * as Speech from 'expo-speech';
+import { audioManager } from '../lib/audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -21,25 +20,37 @@ export default function HomeScreen() {
 
   const isDarkMode = useColorScheme() === 'dark';
 
-  const [buttonScale] = React.useState(new Animated.Value(1));
-  const [buttonGlow] = React.useState(new Animated.Value(0));
-  const [isListening, setIsListening] = React.useState(false);
-  const [transcribedText, setTranscribedText] = React.useState('');
-  const recording = useRef<Audio.Recording | undefined>(undefined);
+  const [buttonScale] = useState(new Animated.Value(1));
+  const [buttonGlow] = useState(new Animated.Value(0));
+  const [isListening, setIsListening] = useState(false);
+  const [transcribedText, setTranscribedText] = useState('');
+  const animationInterval = useRef<NodeJS.Timeout | null>(null);
   const floatingLetters = useRef<Animated.Value[]>([]);
-  const longPressTimeout = useRef<Audio.Recording | undefined>(undefined);
-
+  const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     if (transcribedText) {
       floatingLetters.current = transcribedText.split('').map(() => new Animated.Value(0));
       animateLetters();
+      
+      if (isListening && transcribedText === 'Ouvindo...') {
+        startContinuousAnimation();
+      } else {
+        stopContinuousAnimation();
+      }
     }
-  }, [transcribedText]);
+    
+    return () => {
+      stopContinuousAnimation();
+    };
+  }, [transcribedText, isListening]);
 
   const animateLetters = () => {
+    if (floatingLetters.current.length === 0) return;
+    
     const animations = floatingLetters.current.map((value, index) => {
       return Animated.sequence([
-        Animated.delay(index * 100),
+        Animated.delay(index * 50), 
         Animated.spring(value, {
           toValue: 1,
           friction: 3,
@@ -47,50 +58,57 @@ export default function HomeScreen() {
           useNativeDriver: true,
         }),
       ]);
-    });
+    });    
     Animated.parallel(animations).start();
+  };
+  
+  const startContinuousAnimation = () => {
+    stopContinuousAnimation();
+    
+    animationInterval.current = setInterval(() => {
+      floatingLetters.current.forEach((value) => {
+        value.setValue(0);
+      });
+      
+      animateLetters();
+    }, 1500);
+  };
+  
+  const stopContinuousAnimation = () => {
+    if (animationInterval.current) {
+      clearInterval(animationInterval.current);
+      animationInterval.current = null;
+    }
   };
 
   const startRecording = async () => {
-    try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recording.current = newRecording;
+    const success = await audioManager.startRecording();
+    if (success) {
       setTranscribedText('Ouvindo...');
-    } catch (err) {
-      console.error('Falha ao iniciar gravação:', err);
     }
   };
 
   const stopRecording = async () => {
-    if (!recording.current) return;
-
-    try {
-      await recording.current.stopAndUnloadAsync();
-      const uri = recording.current.getURI();
-      recording.current = undefined;
-
+    const result = await audioManager.stopRecording();
+    if (result.success) {
       // Aqui você pode implementar a chamada para a API de transcrição
-      // Por enquanto, vamos simular uma resposta
-      setTranscribedText('Exemplo de transcrição de áudio');
-    } catch (err) {
-      console.error('Falha ao parar gravação:', err);
+      // Por enquanto, vamos simular uma resposta após um breve delay
+      setTimeout(() => {
+        setTranscribedText('Exemplo de transcrição de áudio');
+      }, 500);
     }
   };
 
   const handlePressIn = () => {
-    const timeoutId = setTimeout(() => {
+    // Limpar qualquer timeout anterior
+    if (longPressTimeout.current) {
+      clearTimeout(longPressTimeout.current);
+    }
+    
+    longPressTimeout.current = setTimeout(() => {
       setIsListening(true);
       startRecording();
     }, 2000);
-    (longPressTimeout as any).current = timeoutId;
     Animated.parallel([
       Animated.spring(buttonScale, {
         toValue: 1.1,
@@ -115,11 +133,12 @@ export default function HomeScreen() {
 
   const handlePressOut = () => {
     if (longPressTimeout.current) {
-      clearTimeout(longPressTimeout.current as unknown as number);
+      clearTimeout(longPressTimeout.current);
     }
 
     if (isListening) {
       stopRecording();
+      stopContinuousAnimation();
       setIsListening(false);
     } else {
     buttonGlow.stopAnimation();
@@ -370,7 +389,7 @@ const styles = StyleSheet.create({
   floatingLetter: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#4ADE80',
+    color: '#FFF',
     marginHorizontal: 2,
     textShadowColor: '#34D399',
     textShadowOffset: { width: 0, height: 2 },
