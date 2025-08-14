@@ -31,7 +31,6 @@ export default function ChatScreen() {
     try {
       const response = await callGeminiAPI(
         userMessage.text, // Prompt
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent' // URI
       ); 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),

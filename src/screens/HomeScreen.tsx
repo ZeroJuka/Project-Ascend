@@ -91,10 +91,8 @@ export default function HomeScreen() {
   const stopRecording = async () => {
     const result = await audioManager.stopRecording();
     if (result.success) {
-      // Aqui você pode implementar a chamada para a API de transcrição
-      // Por enquanto, vamos simular uma resposta após um breve delay
       setTimeout(() => {
-        setTranscribedText('Exemplo de transcrição de áudio');
+        setTranscribedText(result.transcription || '');
       }, 500);
     }
   };

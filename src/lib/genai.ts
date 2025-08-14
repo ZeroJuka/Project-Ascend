@@ -1,5 +1,7 @@
-import { GEMINI_KEY } from '@env';
+import { GEMINI_KEY, GEMINI_URL } from '@env';
+
 const geminikey = GEMINI_KEY;
+const geminiUri = GEMINI_URL;
 
 export type GeminiResponse = {
   candidates: {
@@ -22,10 +24,17 @@ export type GeminiResponse = {
   };
 };
 
-export async function callGeminiAPI(prompt: string, uri: string): Promise<GeminiResponse> {
+export async function callGeminiAPI(prompt: string): Promise<GeminiResponse> {
   try {
+    console.warn(`
+        ==================================================
+        Gemini Key Used: ${geminikey}
+        URI Fetched: ${geminiUri}
+        ==================================================
+      `);
+
     const response = await fetch(
-      uri,
+      geminiUri,
       {
         method: 'POST',
         headers: {
@@ -51,7 +60,7 @@ export async function callGeminiAPI(prompt: string, uri: string): Promise<Gemini
       throw new Error(`HTTP error! Status: ${response.status},
         ==================================================
         Gemini Key Used: ${geminikey}
-        URI Fetched: ${uri}
+        URI Fetched: ${geminiUri}
         ==================================================
         Message: ${errorBody || 'No error message available'}`);
     }
