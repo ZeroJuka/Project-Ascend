@@ -20,106 +20,45 @@ export default function HomeScreen() {
 
   const isDarkMode = useColorScheme() === 'dark';
 
-  const [buttonScale] = useState(new Animated.Value(1));
-  const [buttonGlow] = useState(new Animated.Value(0));
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
-  const [textOpacity] = useState(new Animated.Value(1));
   const [showUserProfile, setShowUserProfile] = useState(false);
-  const animationInterval = useRef<NodeJS.Timeout | null>(null);
-  const floatingLetters = useRef<Animated.Value[]>([]);
   const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
   const fadeOutTimeout = useRef<NodeJS.Timeout | null>(null);
   
+
+  //#region gerenciar audio
+  useEffect(() => {
+    audioManager.initializeAnimationState();
+    return () => {
+      audioManager.stopContinuousAnimation();
+      if (fadeOutTimeout.current) {
+        clearTimeout(fadeOutTimeout.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (transcribedText) {
-      floatingLetters.current = transcribedText.split('').map(() => new Animated.Value(0));
-      animateLetters();
+      audioManager.updateFloatingLetters(transcribedText);
       
       if (isListening && transcribedText === 'Ouvindo...') {
-        startContinuousAnimation();
-        Animated.parallel([
-          Animated.spring(buttonScale, {
-            toValue: 1.6, 
-            useNativeDriver: true,
-          }),
-          Animated.loop(
-            Animated.sequence([
-              Animated.timing(buttonGlow, {
-                toValue: 1,
-                duration: 800,
-                useNativeDriver: true,
-              }),
-              Animated.timing(buttonGlow, {
-                toValue: 0.5,
-                duration: 800,
-                useNativeDriver: true,
-              }),
-            ])
-          ),
-        ]).start();
+        audioManager.startContinuousAnimation();
+        audioManager.animateButtonPress(true);
       } else {
-        stopContinuousAnimation();
-        textOpacity.setValue(1);
+        audioManager.stopContinuousAnimation();
+        const animState = audioManager.getAnimationState();
+        animState.textOpacity.setValue(1);
         
         if (fadeOutTimeout.current) {
           clearTimeout(fadeOutTimeout.current);
         }
         
         // Iniciar o desaparecimento gradual após 5 segundos
-        fadeOutTimeout.current = setTimeout(() => {
-          Animated.timing(textOpacity, {
-            toValue: 0,
-            duration: 1000, 
-            useNativeDriver: true,
-          }).start();
-        }, 5000); 
+        audioManager.startTextFadeOut(5000);
       }
     }
-    
-    return () => {
-      stopContinuousAnimation();
-      if (fadeOutTimeout.current) {
-        clearTimeout(fadeOutTimeout.current);
-      }
-    };
   }, [transcribedText, isListening]);
-
-  const animateLetters = () => {
-    if (floatingLetters.current.length === 0) return;
-    
-    const animations = floatingLetters.current.map((value, index) => {
-      return Animated.sequence([
-        Animated.delay(index * 50), 
-        Animated.spring(value, {
-          toValue: 1,
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]);
-    });    
-    Animated.parallel(animations).start();
-  };
-  
-  const startContinuousAnimation = () => {
-    stopContinuousAnimation();
-    
-    animationInterval.current = setInterval(() => {
-      floatingLetters.current.forEach((value) => {
-        value.setValue(0);
-      });
-      
-      animateLetters();
-    }, 1500);
-  };
-  
-  const stopContinuousAnimation = () => {
-    if (animationInterval.current) {
-      clearInterval(animationInterval.current);
-      animationInterval.current = null;
-    }
-  };
 
   const startRecording = async () => {
     const success = await audioManager.startRecording();
@@ -149,26 +88,7 @@ export default function HomeScreen() {
     }, 2000);
     
     // Animação inicial ao pressionar
-    Animated.parallel([
-      Animated.spring(buttonScale, {
-        toValue: 1.1,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(buttonGlow, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(buttonGlow, {
-            toValue: 0,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ),
-    ]).start();
+    audioManager.animateButtonPress(false);
   };
 
   const handlePressOut = () => {
@@ -178,31 +98,29 @@ export default function HomeScreen() {
 
     if (isListening) {
       stopRecording();
-      stopContinuousAnimation();
+      audioManager.stopContinuousAnimation();
       setIsListening(false);
       
       // Retornar o botão ao tamanho normal quando parar de ouvir
-      Animated.spring(buttonScale, {
-        toValue: 1,
-        useNativeDriver: true,
-      }).start();
-      buttonGlow.stopAnimation();
+      audioManager.resetButtonAnimation();
     } else {
-      buttonGlow.stopAnimation();
-      Animated.spring(buttonScale, {
-        toValue: 1,
-        useNativeDriver: true,
-      }).start();
+      audioManager.resetButtonAnimation();
       navigation.navigate('Chat' as never);
     }
   };
 
+  // Obter o estado de animação para usar nos componentes
+  const animState = audioManager.getAnimationState();
+
+  //#endregion gerenciar audio
+  
   const navigationButtons = [
     { icon: 'wallet-outline', label: 'Transações', color: '#4ADE80' },
     { icon: 'pie-chart-outline', label: 'Relatórios', color: '#34D399' },
     { icon: 'trending-up-outline', label: 'Metas', color: '#2DD4BF' },
     { icon: 'settings-outline', label: 'Configurações', color: '#22D3EE' },
   ];
+
 
   return (
     <SafeAreaView style={[styles.container, isDarkMode && styles.darkContainer]}>
@@ -211,12 +129,33 @@ export default function HomeScreen() {
           <Animated.View 
             style={[
               styles.transcriptionContainer, 
-              { opacity: textOpacity },
+              { opacity: animState.textOpacity },
               { pointerEvents: 'none' } // Torna o componente intangível
             ]}
           >
             <Animated.Text style={styles.transcribedTextComplete}>
-              {transcribedText}
+              {transcribedText.split('').map((char, index) => {
+                const animValue = index < animState.floatingLetters.length ? 
+                  animState.floatingLetters[index] : new Animated.Value(1);
+                return (
+                  <Animated.Text
+                    key={index}
+                    style={{
+                      opacity: animValue,
+                      transform: [
+                        {
+                          translateY: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [20, 0],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    {char}
+                  </Animated.Text>
+                );
+              })}
             </Animated.Text>
           </Animated.View>
         )}
@@ -255,7 +194,7 @@ export default function HomeScreen() {
         <View style={styles.centerButtonContainer}>
           <Animated.View
             style={[{
-              transform: [{ scale: buttonScale }],
+              transform: [{ scale: animState.buttonScale }],
               opacity: 1,
               shadowColor: isListening ? '#4ADE80' : '#000',
               shadowOffset: { width: 0, height: 2 },
@@ -298,23 +237,22 @@ export default function HomeScreen() {
             <View style={styles.userProfileHeader}>
               <Text style={styles.userProfileTitle}>Perfil do Usuário</Text>
               <TouchableOpacity onPress={() => setShowUserProfile(false)}>
-                <Ionicons name="close" size={24} color="#666" />
+                <Ionicons name="close-outline" size={24} color="#333" />
               </TouchableOpacity>
             </View>
             
             <View style={styles.userProfileContent}>
-              <View style={styles.userAvatar}>
-                <Ionicons name="person" size={50} color="#4ADE80" />
+              <View style={styles.userProfileAvatar}>
+                <Ionicons name="person" size={48} color="#4ADE80" />
               </View>
-              <Text style={styles.userName}>Usuário</Text>
-              <Text style={styles.userEmail}>usuario@exemplo.com</Text>
+              <Text style={styles.userProfileName}>Usuário</Text>
+              <Text style={styles.userProfileEmail}>usuario@exemplo.com</Text>
               
               <TouchableOpacity 
-                style={styles.logoutButton}
+                style={styles.signOutButton}
                 onPress={handleSignOut}
               >
-                <Ionicons name="log-out-outline" size={20} color="#fff" />
-                <Text style={styles.logoutButtonText}>Sair</Text>
+                <Text style={styles.signOutButtonText}>Sair</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -330,99 +268,107 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   darkContainer: {
-    backgroundColor: '#1F2937',
+    backgroundColor: '#121212',
   },
   content: {
     flex: 1,
     padding: 20,
-    alignItems: 'center',
+    paddingTop: 40,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    marginTop: 40,
-    color: '#4ADE80',
+    textAlign: 'center',
+    marginBottom: 8,
+    color: '#333',
+  },
+  darkText: {
+    color: '#fff',
   },
   subtitle: {
-    fontSize: 18,
-    marginTop: 10,
-    color: '#666',
+    fontSize: 16,
+    textAlign: 'center',
     marginBottom: 30,
+    color: '#666',
+  },
+  darkSubtext: {
+    color: '#aaa',
   },
   dashboard: {
     flex: 1,
-    width: '100%',
-    padding: 20,
+    gap: 20,
   },
   balanceCard: {
+    borderRadius: 16,
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   balanceLabel: {
-    color: 'white',
     fontSize: 16,
-    opacity: 0.9,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
   },
   balanceAmount: {
-    color: 'white',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 8,
+    color: '#fff',
   },
   buttonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 15,
+    gap: 16,
   },
   navButton: {
-    width: '47%',
-    padding: 20,
-    borderRadius: 15,
+    width: '48%',
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    marginBottom: 10,
   },
   navButtonText: {
-    color: 'white',
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  signOutButton: {
-    marginBottom: 30,
-    padding: 15,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center',
-  },
-  darkSignOutButton: {
-    backgroundColor: '#374151',
-  },
-  signOutButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  darkText: {
     color: '#fff',
-  },
-  darkSubtext: {
-    color: '#9CA3AF',
+    marginTop: 8,
+    fontWeight: '500',
   },
   bottomNav: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#374151',
-    paddingVertical: 10,
     paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#333',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   centerButtonContainer: {
-    marginTop: -40,
+    position: 'relative',
+    bottom: 20,
   },
   centerButton: {
     width: 60,
@@ -430,71 +376,52 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
   centerButtonIcon: {
     width: 30,
     height: 30,
-    tintColor: '#fff',
+    resizeMode: 'contain',
   },
   transcriptionContainer: {
     position: 'absolute',
-    top: '75%', // Posicionado mais próximo ao botão Atlas
-    left: 0,
-    right: 0,
-    padding: 20,
+    top: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    padding: 16,
     zIndex: 10,
-    alignItems: 'center',
-    maxWidth: '100%',
   },
   transcribedTextComplete: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
+    color: '#fff',
+    fontSize: 18,
     textAlign: 'center',
-    textShadowColor: '#34D399',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    flexWrap: 'wrap',
-    maxWidth: '90%',
-  },
-  floatingLetter: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginHorizontal: 2,
-    textShadowColor: '#34D399',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  // Novos estilos
-  profileButton: {
-    padding: 10,
-  },
-  settingsButton: {
-    padding: 10,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   userProfileCard: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    minHeight: 300,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   userProfileHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    padding: 16,
   },
   userProfileTitle: {
     fontSize: 18,
@@ -502,40 +429,40 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   userProfileContent: {
+    padding: 20,
     alignItems: 'center',
   },
-  userAvatar: {
+  userProfileAvatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
   },
-  userName: {
+  userProfileName: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 5,
+    marginBottom: 4,
   },
-  userEmail: {
+  userProfileEmail: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  logoutButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FF6B6B',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+  signOutButton: {
+    backgroundColor: '#f44336',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
     alignItems: 'center',
-    marginTop: 20,
   },
-  logoutButtonText: {
+  signOutButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 10,
+    fontSize: 16,
+    fontWeight: '500',
   },
-});
+}); 

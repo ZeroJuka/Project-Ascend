@@ -5,7 +5,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types';
 
-// Screens
+// Screens (TEM QUE ADICIONAR A TELA AQUI SE CRIAR UMA NOVA)
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';

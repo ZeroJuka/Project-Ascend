@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
 import { WHISPER_KEY, WHISPER_URL } from '@env';
+import { Animated } from 'react-native';
 
 const whisperUri = WHISPER_URL;
 const whisperToken = WHISPER_KEY;
@@ -10,6 +11,14 @@ interface RecordingResult {
   success: boolean;
   error?: string;
   transcription?: string;
+}
+
+interface AnimationState {
+  buttonScale: Animated.Value;
+  buttonGlow: Animated.Value;
+  textOpacity: Animated.Value;
+  floatingLetters: Animated.Value[];
+  animationInterval: NodeJS.Timeout | null;
 }
 
 const recordingOptions = {
@@ -44,6 +53,13 @@ const recordingOptions = {
 class AudioManager {
   private recording: Audio.Recording | undefined;
   private isListening: boolean = false;
+  private animationState: AnimationState = {
+    buttonScale: new Animated.Value(1),
+    buttonGlow: new Animated.Value(0),
+    textOpacity: new Animated.Value(1),
+    floatingLetters: [],
+    animationInterval: null
+  };
 
 
   //SETUP do objeto de recording e das permissões do mobile
@@ -174,6 +190,125 @@ class AudioManager {
       console.error('Erro ao transcrever áudio:', error);
       return '';
     }
+  }
+
+  // Métodos de animação
+  getAnimationState(): AnimationState {
+    return this.animationState;
+  }
+
+  initializeAnimationState(): void {
+    this.animationState = {
+      buttonScale: new Animated.Value(1),
+      buttonGlow: new Animated.Value(0),
+      textOpacity: new Animated.Value(1),
+      floatingLetters: [],
+      animationInterval: null
+    };
+  }
+
+  updateFloatingLetters(text: string): void {
+    this.animationState.floatingLetters = text.split('').map(() => new Animated.Value(0));
+    this.animateLetters();
+  }
+
+  animateLetters(): void {
+    if (this.animationState.floatingLetters.length === 0) return;
+    
+    const animations = this.animationState.floatingLetters.map((value, index) => {
+      return Animated.sequence([
+        Animated.delay(index * 50), 
+        Animated.spring(value, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]);
+    });    
+    Animated.parallel(animations).start();
+  }
+  
+  startContinuousAnimation(): void {
+    this.stopContinuousAnimation();
+    
+    this.animationState.animationInterval = setInterval(() => {
+      this.animationState.floatingLetters.forEach((value) => {
+        value.setValue(0);
+      });
+      
+      this.animateLetters();
+    }, 1500);
+  }
+  
+  stopContinuousAnimation(): void {
+    if (this.animationState.animationInterval) {
+      clearInterval(this.animationState.animationInterval);
+      this.animationState.animationInterval = null;
+    }
+  }
+
+  animateButtonPress(isListening: boolean): void {
+    if (isListening) {
+      Animated.parallel([
+        Animated.spring(this.animationState.buttonScale, {
+          toValue: 1.6, 
+          useNativeDriver: true,
+        }),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(this.animationState.buttonGlow, {
+              toValue: 1,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+            Animated.timing(this.animationState.buttonGlow, {
+              toValue: 0.5,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ]).start();
+    } else {
+      Animated.spring(this.animationState.buttonScale, {
+        toValue: 1.1,
+        useNativeDriver: true,
+      }).start();
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(this.animationState.buttonGlow, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(this.animationState.buttonGlow, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+  }
+
+  resetButtonAnimation(): void {
+    this.animationState.buttonGlow.stopAnimation();
+    Animated.spring(this.animationState.buttonScale, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  startTextFadeOut(delay: number = 5000): void {
+    this.animationState.textOpacity.setValue(1);
+    setTimeout(() => {
+      Animated.timing(this.animationState.textOpacity, {
+        toValue: 0,
+        duration: 1000, 
+        useNativeDriver: true,
+      }).start();
+    }, delay);
   }
 }
 
