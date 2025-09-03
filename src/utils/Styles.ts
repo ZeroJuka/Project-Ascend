@@ -1,5 +1,52 @@
 import StyleSheet from 'react-native';
-import { colors } from '../utils/theme';
+import { colors } from './theme';
+
+export const headerStyles = StyleSheet.StyleSheet.create({
+  headerContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(31, 41, 55, 0.95)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4ADE80',
+  },
+  logoText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4ADE80',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Estados interativos serão gerenciados via activeOpacity no TouchableOpacity
+  },
+});
 
 export const commonStyles = StyleSheet.StyleSheet.create({
   container: {

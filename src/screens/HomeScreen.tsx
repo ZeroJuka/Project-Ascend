@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabase';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
-import { commonStyles } from '../components/styles';
+import { commonStyles } from '../utils/Styles';
+import Header from '../components/Header';
 
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -17,7 +18,8 @@ export default function HomeScreen() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    navigation.navigate('Login');
+    // Não precisamos navegar manualmente, o AppNavigator já faz isso
+    console.log('Logout realizado com sucesso');
   };
 
   const isDarkMode = useColorScheme() === 'dark';
@@ -25,6 +27,7 @@ export default function HomeScreen() {
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
   const [showUserProfile, setShowUserProfile] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
   const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
   const fadeOutTimeout = useRef<NodeJS.Timeout | null>(null);
   
@@ -116,17 +119,14 @@ export default function HomeScreen() {
 
   //#endregion gerenciar audio
   
-  const navigationButtons = [
-    { icon: 'wallet-outline', label: 'Transações', color: '#4ADE80' },
-    { icon: 'pie-chart-outline', label: 'Relatórios', color: '#34D399' },
-    { icon: 'trending-up-outline', label: 'Metas', color: '#2DD4BF' },
-    { icon: 'settings-outline', label: 'Configurações', color: '#22D3EE' },
-  ];
-
+  const handleProfilePress = () => {
+    setShowUserProfile(true);
+  };
 
   return (
     <SafeAreaView style={[styles.container, isDarkMode && styles.darkContainer]}>
-      <View style={styles.content}>
+      <Header onProfilePress={handleProfilePress} />
+      <View style={[styles.content, { marginTop: 80 }]}>
         {transcribedText && (
           <Animated.View 
             style={[
@@ -161,77 +161,151 @@ export default function HomeScreen() {
             </Animated.Text>
           </Animated.View>
         )}
-        <Text style={[styles.title, isDarkMode && styles.darkText]}>ASCEND</Text>
-        <Text style={[styles.subtitle, isDarkMode && styles.darkSubtext]}>Bem-vindo ao seu assistente financeiro</Text>
         
-        <View style={styles.dashboard}>
-          <View style={[styles.balanceCard, { backgroundColor: '#4ADE80' }]}>
+        {/* Saldo Total */}
+        <View style={styles.balanceCardContainer}>
+          <LinearGradient
+            colors={['#4ADE80', '#34D399']}
+            style={styles.balanceCard}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
             <Text style={styles.balanceLabel}>Saldo Total</Text>
-            <Text style={styles.balanceAmount}>R$ 0,00</Text>
-          </View>
+            <Text style={styles.balanceAmount}>R$ 12.847,50</Text>
+            <Text style={styles.balanceChange}>+15,3% este mês</Text>
+          </LinearGradient>
+        </View>
 
-          <View style={styles.buttonGrid}>
-            {navigationButtons.map((button, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.navButton, { backgroundColor: button.color }]}
-              >
-                <Ionicons name={button.icon as keyof typeof Ionicons.glyphMap} size={24} color="white" />
-                <Text style={styles.navButtonText}>{button.label}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* Cards de Receitas e Gastos */}
+        <View style={styles.statsContainer}>
+          <View style={[styles.statsCard, { backgroundColor: 'rgba(74, 222, 128, 0.9)' }]}>
+            <Text style={styles.statsLabel}>Receitas</Text>
+            <Text style={styles.statsAmount}>R$ 8.420</Text>
+            <Text style={[styles.statsChange, { color: '#4ADE80' }]}>+12,5%</Text>
+            <Ionicons name="arrow-up-outline" size={20} color="#4ADE80" style={styles.statsIcon} />
+          </View>
+          
+          <View style={[styles.statsCard, { backgroundColor: 'rgba(56, 189, 248, 0.9)' }]}>
+            <Text style={styles.statsLabel}>Gastos</Text>
+            <Text style={styles.statsAmount}>R$ 6.340</Text>
+            <Text style={[styles.statsChange, { color: '#F87171' }]}>-8,2%</Text>
+            <Ionicons name="arrow-down-outline" size={20} color="#F87171" style={styles.statsIcon} />
           </View>
         </View>
-        
+
+        {/* Análise de Gastos */}
+        <View style={styles.expenseAnalysisContainer}>
+          <View style={styles.expenseHeader}>
+            <Text style={styles.expenseTitle}>Análise de Gastos</Text>
+            <View style={styles.tabContainer}>
+              <TouchableOpacity 
+                style={[styles.tabButton, activeTab === 'categories' && styles.activeTabButton]}
+                onPress={() => setActiveTab('categories')}
+              >
+                <Text style={[styles.tabButtonText, activeTab === 'categories' && styles.activeTabText]}>Categorias</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.tabButton, activeTab === 'monthly' && styles.activeTabButton]}
+                onPress={() => setActiveTab('monthly')}
+              >
+                <Text style={[styles.tabButtonText, activeTab === 'monthly' && styles.activeTabText]}>Mensal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          <View style={styles.chartContainer}>
+            {/* Aqui seria inserido o componente de gráfico */}
+            <View style={styles.donutChart}>
+              <View style={[styles.donutSegment, { backgroundColor: '#4ADE80', width: 120, height: 120, transform: [{ rotate: '0deg' }] }]} />
+              <View style={[styles.donutSegment, { backgroundColor: '#38BDF8', width: 100, height: 100, transform: [{ rotate: '120deg' }] }]} />
+              <View style={[styles.donutSegment, { backgroundColor: '#A78BFA', width: 80, height: 80, transform: [{ rotate: '200deg' }] }]} />
+              <View style={[styles.donutSegment, { backgroundColor: '#FB923C', width: 60, height: 60, transform: [{ rotate: '260deg' }] }]} />
+              <View style={[styles.donutSegment, { backgroundColor: '#F87171', width: 40, height: 40, transform: [{ rotate: '320deg' }] }]} />
+              <View style={styles.donutHole} />
+            </View>
+          </View>
+          
+          <View style={styles.legendContainer}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#4ADE80' }]} />
+              <Text style={styles.legendText}>Alimentação</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#38BDF8' }]} />
+              <Text style={styles.legendText}>Transporte</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#A78BFA' }]} />
+              <Text style={styles.legendText}>Lazer</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#FB923C' }]} />
+              <Text style={styles.legendText}>Saúde</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#F87171' }]} />
+              <Text style={styles.legendText}>Outros</Text>
+            </View>
+          </View>
+        </View>
       </View>
 
+      {/* Barra de navegação inferior */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={styles.profileButton}
-          onPress={() => setShowUserProfile(true)}
-        >
-          <Ionicons name="person-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Transactions')}>
+          <Ionicons name="add-circle-outline" size={24} color="#4ADE80" />
+          <Text style={styles.navText}>Transações</Text>
         </TouchableOpacity>
-
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Metas')}>
+          <Ionicons name="flag-outline" size={24} color="#4ADE80" />
+          <Text style={styles.navText}>Metas</Text>
+        </TouchableOpacity>
+        
         <View style={styles.centerButtonContainer}>
           <Animated.View
-            style={[{
-              transform: [{ scale: animState.buttonScale }],
-              opacity: 1,
-              shadowColor: isListening ? '#4ADE80' : '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: isListening ? 0.8 : 0.25,
-              shadowRadius: isListening ? 10 : 3.84,
-              elevation: isListening ? 8 : 5,
-            }]}
+            style={{
+              transform: [
+                { scale: animState.buttonScale },
+              ],
+            }}
           >
-            <Pressable
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
+            <LinearGradient
+              colors={['#4ADE80', '#34D399']}
+              style={styles.centerButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-              <LinearGradient
-                colors={isListening ? ['#4ADE80', '#10B981'] : ['#4ADE80', '#34D399']}
-                style={styles.centerButton}
+              <Pressable
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
               >
-                <Image
-                  source={require('../../assets/icon.png')}
-                  style={styles.centerButtonIcon}
+                <Ionicons 
+                  name={isListening ? "mic" : "mic-outline"} 
+                  size={30} 
+                  color="white" 
                 />
-              </LinearGradient>
-            </Pressable>
+              </Pressable>
+            </LinearGradient>
           </Animated.View>
         </View>
-
-        <TouchableOpacity style={styles.settingsButton}>
-          <Ionicons name="settings-outline" size={24} color="#fff" />
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Análises')}>
+          <Ionicons name="pie-chart-outline" size={24} color="#4ADE80" />
+          <Text style={styles.navText}>Análises</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Config')}>
+          <Ionicons name="settings-outline" size={24} color="#4ADE80" />
+          <Text style={styles.navText}>Config</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Modal do Perfil do Usuário */}
       <Modal
         visible={showUserProfile}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowUserProfile(false)}
       >
         <View style={styles.modalOverlay}>
@@ -264,4 +338,183 @@ export default function HomeScreen() {
   );
 }
 
-const styles = commonStyles;
+// Estilos específicos para esta tela
+const styles = StyleSheet.create({
+  ...commonStyles,
+  balanceCardContainer: {
+    marginBottom: 16,
+  },
+  balanceCard: {
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  balanceLabel: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
+  },
+  balanceAmount: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  balanceChange: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.8,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  statsCard: {
+    width: '48%',
+    borderRadius: 16,
+    padding: 16,
+    position: 'relative',
+  },
+  statsLabel: {
+    fontSize: 14,
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  statsAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statsChange: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statsIcon: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+  },
+  expenseAnalysisContainer: {
+    backgroundColor: '#1F2937',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  expenseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  expenseTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#374151',
+    borderRadius: 20,
+    padding: 2,
+  },
+  tabButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+  },
+  activeTabButton: {
+    backgroundColor: '#4ADE80',
+  },
+  tabButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.7,
+  },
+  activeTabText: {
+    opacity: 1,
+    fontWeight: '500',
+  },
+  chartContainer: {
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  donutChart: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  donutSegment: {
+    position: 'absolute',
+    borderRadius: 100,
+  },
+  donutHole: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#1F2937',
+    position: 'absolute',
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 4,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#fff',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#1F2937',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  navText: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  centerButtonContainer: {
+    position: 'relative',
+    bottom: 20,
+  },
+  centerButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

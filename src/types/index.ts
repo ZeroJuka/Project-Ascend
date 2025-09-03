@@ -11,4 +11,5 @@ export type RootStackParamList = {
   Register: undefined;
   Home: undefined;
   Chat: undefined;
+  Transactions: undefined;
 };

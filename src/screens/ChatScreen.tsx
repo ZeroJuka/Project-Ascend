@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/theme';
 import { callGeminiAPI } from '../lib/genai';
-import { commonStyles } from '../components/styles';
+import Header from '../components/Header';
 
 type Message = {
   id: string;
@@ -13,9 +13,13 @@ type Message = {
 };
 
 export default function ChatScreen() {
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  const [showUserProfile, setShowUserProfile] = useState(false);
+
+  const handleProfilePress = () => {
+    setShowUserProfile(true);
+  };
 
   const sendMessage = async () => {
     if (!inputText.trim()) return;
@@ -60,9 +64,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>ATLAS</Text>
-      </View>
+      <Header title="ATLAS" onProfilePress={handleProfilePress} />
 
       <FlatList
         data={messages}
@@ -70,6 +72,7 @@ export default function ChatScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.messagesList}
         inverted={false}
+        style={{ marginTop: 80 }}
       />
 
       <KeyboardAvoidingView
@@ -96,4 +99,76 @@ export default function ChatScreen() {
     </SafeAreaView>
   );
 }
-const styles = commonStyles;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1F2937',
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    backgroundColor: '#1F2937',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  messagesList: {
+    padding: 16,
+  },
+  messageContainer: {
+    maxWidth: '80%',
+    marginVertical: 8,
+    padding: 12,
+    borderRadius: 16,
+  },
+  userMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.primary,
+  },
+  aiMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#374151',
+  },
+  messageText: {
+    fontSize: 16,
+  },
+  userMessageText: {
+    color: '#1F2937',
+  },
+  aiMessageText: {
+    color: '#fff',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    backgroundColor: '#1F2937',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    color: '#fff',
+    maxHeight: 100,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#374151',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+});

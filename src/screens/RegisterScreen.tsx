@@ -1,28 +1,24 @@
 import React from 'react';
 import { StyleSheet, View, Image, SafeAreaView, KeyboardAvoidingView, Platform, StatusBar, Text } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Auth from '../components/Auth';
-import { RootStackParamList } from '../types';
-import { commonStyles } from '../components/styles';
-
-type RegisterScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Register'>;
+import { commonStyles } from '../utils/Styles';
+import Header from '../components/Header';
 
 export default function RegisterScreen() {
-  const navigation = useNavigation<RegisterScreenNavigationProp>();
-
   const handleAuthSuccess = () => {
+    // Não precisamos navegar manualmente, o AppNavigator já faz isso
     console.log('Cadastro bem-sucedido');
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <Header title="Cadastro" showProfileButton={false} />
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
-        <View style={styles.logoContainer}>
+        <View style={[styles.logoContainer, { marginTop: 80 }]}>
           <Image 
             source={require('../../assets/icon.png')} 
             style={styles.logo} 

@@ -46,8 +46,10 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
 
     if (error) {
       Alert.alert('Erro ao entrar', error.message);
-    } else if (onAuthSuccess) {
-      onAuthSuccess();
+    } else {
+      // Não precisamos chamar onAuthSuccess aqui, pois o AppNavigator já vai redirecionar
+      // baseado na mudança de estado da sessão
+      console.log('Login bem-sucedido');
     }
     
     setLoading(false);
@@ -76,8 +78,10 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
         friction: 8,
         tension: 40
       }).start();
-    } else if (onAuthSuccess) {
-      onAuthSuccess();
+    } else {
+      // Não precisamos chamar onAuthSuccess aqui, pois o AppNavigator já vai redirecionar
+      // baseado na mudança de estado da sessão
+      console.log('Cadastro e login bem-sucedidos');
     }
     
     setLoading(false);

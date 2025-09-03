@@ -161,17 +161,23 @@ class AudioManager {
         return '';
       }
       
-      const response = await fetch(uri);
-      const audioBlob = await response.blob();
-
+      // Obter o arquivo de áudio como blob
+      const audioResponse = await fetch(uri);
+      const audioBlob = await audioResponse.blob();
+      
       const apiResponse = await fetch(whisperUri, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${whisperToken}`,
-          'Content-Type': 'audio/wav',
         },
-        body: audioBlob,
+        body: audioBlob, // Enviar o blob diretamente
       });
+      const contentType = apiResponse.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const textResponse = await apiResponse.text();
+        console.error('Resposta não-JSON da API:', textResponse);
+        return 'Erro: Serviço de transcrição indisponível. Verifique se o token é válido.';
+      }
       
       const data = await apiResponse.json();
       console.info('Transcription data:', JSON.stringify(data),
@@ -182,13 +188,13 @@ class AudioManager {
         return data.text;
       } else if (data.error) {
         console.error('Erro na API de transcrição:', data.error);
-        return '';
+        return 'Erro: ' + data.error;
       }
       
-      return '';
+      return 'Não foi possível transcrever o áudio';
     } catch (error) {
       console.error('Erro ao transcrever áudio:', error);
-      return '';
+      return 'Erro na transcrição. Tente novamente.';
     }
   }
 
