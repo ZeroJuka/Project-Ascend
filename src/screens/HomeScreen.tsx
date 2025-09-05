@@ -9,7 +9,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { commonStyles } from '../utils/Styles';
 import Header from '../components/Header';
-
+import Footer from '../components/Footer';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -250,57 +250,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Barra de navegação inferior */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Transactions')}>
-          <Ionicons name="add-circle-outline" size={24} color="#4ADE80" />
-          <Text style={styles.navText}>Transações</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Metas')}>
-          <Ionicons name="flag-outline" size={24} color="#4ADE80" />
-          <Text style={styles.navText}>Metas</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.centerButtonContainer}>
-          <Animated.View
-            style={{
-              transform: [
-                { scale: animState.buttonScale },
-              ],
-            }}
-          >
-            <LinearGradient
-              colors={['#4ADE80', '#34D399']}
-              style={styles.centerButton}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Pressable
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
-              >
-                <Ionicons 
-                  name={isListening ? "mic" : "mic-outline"} 
-                  size={30} 
-                  color="white" 
-                />
-              </Pressable>
-            </LinearGradient>
-          </Animated.View>
-        </View>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Análises')}>
-          <Ionicons name="pie-chart-outline" size={24} color="#4ADE80" />
-          <Text style={styles.navText}>Análises</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => console.log('Config')}>
-          <Ionicons name="settings-outline" size={24} color="#4ADE80" />
-          <Text style={styles.navText}>Config</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Barra de navegação inferior padronizada */}
+      <Footer activeScreen="Home" />
 
       <Modal
         visible={showUserProfile}

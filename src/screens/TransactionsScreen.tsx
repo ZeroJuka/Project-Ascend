@@ -1,30 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, SafeAreaView,} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { transactionService } from '../lib/transactionService';
+import { categoryService } from '../lib/categoryService';
 import { Transaction, TransactionFormData } from '../types/transaction';
+import { Category } from '../types/category';
 import { commonStyles } from '../utils/Styles';
 import Header from '../components/Header';
+import CategoryManager from '../components/CategoryManager';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { LineChart } from 'react-native-chart-kit';
+import Footer from '../components/Footer';
 
-const CATEGORIES = [
-  { id: 'food', name: 'Alimentação', icon: 'restaurant-outline', color: '#4ADE80' },
-  { id: 'transport', name: 'Transporte', icon: 'car-outline', color: '#38BDF8' },
-  { id: 'leisure', name: 'Lazer', icon: 'game-controller-outline', color: '#A78BFA' },
-  { id: 'health', name: 'Saúde', icon: 'medical-outline', color: '#FB923C' },
-  { id: 'education', name: 'Educação', icon: 'school-outline', color: '#F87171' },
-  { id: 'bills', name: 'Contas', icon: 'receipt-outline', color: '#FBBF24' },
-  { id: 'shopping', name: 'Compras', icon: 'cart-outline', color: '#EC4899' },
-  { id: 'other', name: 'Outros', icon: 'ellipsis-horizontal-outline', color: '#6B7280' },
-];
+const DEFAULT_CATEGORIES: Partial<Category>[] = [];
 
 export default function TransactionsScreen() {
   const navigation = useNavigation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES as Category[]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<string | null>(null);
   const [formData, setFormData] = useState<TransactionFormData>({
     description: '',
@@ -36,6 +34,7 @@ export default function TransactionsScreen() {
 
   useEffect(() => {
     loadTransactions();
+    loadCategories();
   }, []);
 
   const loadTransactions = async () => {
@@ -48,6 +47,18 @@ export default function TransactionsScreen() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const customCategories = await categoryService.getCategories();
+      if (customCategories && customCategories.length > 0) {
+        setCategories([...DEFAULT_CATEGORIES as Category[], ...customCategories].sort());
+      }
+    } catch (error) {
+      console.error('Erro ao carregar categorias personalizadas:', error);
+      setCategories(DEFAULT_CATEGORIES as Category[]);
     }
   };
 
@@ -139,8 +150,30 @@ export default function TransactionsScreen() {
     return date.toLocaleDateString('pt-BR');
   };
 
-  const getCategoryInfo = (categoryId: string) => {
-    return CATEGORIES.find((c) => c.id === categoryId) || CATEGORIES[CATEGORIES.length - 1];
+  const getCategoryInfo = (categoryIdOrKey: string) => {
+    // Procurar primeiro pelo id e depois pelo category_key
+    const category = categories.find(c => c.id === categoryIdOrKey || c.category_key === categoryIdOrKey);
+    
+    if (category) {
+      return {
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+      };
+    }
+    
+    // Categoria padrão caso não encontre
+    return {
+      name: 'Outros',
+      icon: 'ellipsis-horizontal-outline',
+      color: '#6B7280',
+    };
+  };
+  
+  const handleCategorySelected = (category: Category) => {
+    // Usar category_key para categorias padrão, caso contrário usar id
+    const categoryIdentifier = category.category_key || category.id;
+    setFormData({ ...formData, category: categoryIdentifier });
   };
 
   const renderTransactionItem = ({ item }: { item: Transaction }) => {
@@ -204,8 +237,68 @@ export default function TransactionsScreen() {
           </View>
         ) : (
           <>
+            {/* Renko Chart */}
+            <View style={styles.chartContainer}>
+              <Text style={styles.chartTitle}>Fluxo de Caixa</Text>
+              <LineChart
+                data={{
+                  labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
+                  datasets: [
+                    {
+                      data: [
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100
+                      ],
+                      color: (opacity = 1) => `rgba(74, 222, 128, ${opacity})`,
+                      strokeWidth: 2
+                    },
+                    {
+                      data: [
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100,
+                        Math.random() * 100
+                      ],
+                      color: (opacity = 1) => `rgba(248, 113, 113, ${opacity})`,
+                      strokeWidth: 2
+                    }
+                  ],
+                  legend: ['Receitas', 'Despesas']
+                }}
+                width={Dimensions.get('window').width - 32}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#1F2937',
+                  backgroundGradientFrom: '#1F2937',
+                  backgroundGradientTo: '#1F2937',
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                  style: {
+                    borderRadius: 16
+                  },
+                  propsForDots: {
+                    r: '6',
+                    strokeWidth: '2',
+                    stroke: '#ffa726'
+                  }
+                }}
+                bezier
+                style={{
+                  marginVertical: 8,
+                  borderRadius: 16
+                }}
+              />
+            </View>
+            
             <View style={styles.summaryContainer}>
-              <View style={[styles.summaryCard, { backgroundColor: 'rgba(74, 222, 128, 0.3)' }]}>
+              <View style={[styles.summaryCard, { backgroundColor: 'rgba(74, 222, 128, 0.9)' }]}>
                 <Text style={styles.summaryLabel}>Receitas</Text>
                 <Text style={styles.summaryAmount}>
                   {formatCurrency(
@@ -216,7 +309,7 @@ export default function TransactionsScreen() {
                 </Text>
               </View>
               
-              <View style={[styles.summaryCard, { backgroundColor: 'rgba(248, 113, 113, 0.3)' }]}>
+              <View style={[styles.summaryCard, { backgroundColor: 'rgba(248, 113, 113, 0.9)' }]}>
                 <Text style={styles.summaryLabel}>Despesas</Text>
                 <Text style={styles.summaryAmount}>
                   {formatCurrency(
@@ -257,6 +350,7 @@ export default function TransactionsScreen() {
         )}
       </View>
       
+      {/* Modal para adicionar/editar transação */}
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -350,9 +444,18 @@ export default function TransactionsScreen() {
               </View>
               
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Categoria</Text>
+                <View style={styles.categoryHeader}>
+                  <Text style={styles.inputLabel}>Categoria</Text>
+                  <TouchableOpacity 
+                    style={styles.manageCategoriesButton}
+                    onPress={() => setShowCategoryManager(true)}
+                  >
+                    <Text style={styles.manageCategoriesText}>Gerenciar</Text>
+                    <Ionicons name="settings-outline" size={16} color="#4ADE80" />
+                  </TouchableOpacity>
+                </View>
                 <View style={styles.categorySelector}>
-                  {CATEGORIES.map((category) => (
+                  {categories.map((category) => (
                     <TouchableOpacity
                       key={category.id}
                       style={[
@@ -415,6 +518,18 @@ export default function TransactionsScreen() {
           </View>
         </View>
       </Modal>
+
+      <CategoryManager
+        visible={showCategoryManager}
+        onClose={() => {
+          setShowCategoryManager(false);
+          loadCategories(); // Recarregar categorias quando o modal for fechado
+        }}
+        onCategorySelected={handleCategorySelected}
+      />
+      
+      {/* Barra de navegação inferior padronizada */}
+      <Footer activeScreen="Transactions" />
     </SafeAreaView>
   );
 }
@@ -425,6 +540,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingTop: 80,
+    paddingBottom: 70, // Adicionar espaço para a barra de navegação
   },
   loadingContainer: {
     flex: 1,
@@ -435,6 +551,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#fff',
+  },
+  chartContainer: {
+    marginBottom: 20,
+    backgroundColor: '#1F2937',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
   },
   summaryContainer: {
     flexDirection: 'row',
@@ -450,6 +583,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    minHeight: 100, // Garantir altura mínima para evitar corte
   },
   summaryLabel: {
     fontSize: 14,
@@ -639,7 +773,21 @@ const styles = StyleSheet.create({
   categorySelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -4,
+    marginTop: 8,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  manageCategoriesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  manageCategoriesText: {
+    color: '#4ADE80',
+    fontSize: 14,
+    marginRight: 4,
   },
   categoryButton: {
     flexDirection: 'row',

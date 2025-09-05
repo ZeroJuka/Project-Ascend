@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/theme';
 import { callGeminiAPI } from '../lib/genai';
 import Header from '../components/Header';
+import Footer from '../components/Footer';
 
 type Message = {
   id: string;
@@ -96,6 +97,9 @@ export default function ChatScreen() {
           <Ionicons name="send" size={24} color={inputText.trim() ? colors.primary : '#666'} />
         </TouchableOpacity>
       </KeyboardAvoidingView>
+      
+      {/* Barra de navegação inferior padronizada */}
+      <Footer activeScreen="Chat" />
     </SafeAreaView>
   );
 }
