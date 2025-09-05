@@ -25,13 +25,21 @@ ASCEND é um aplicativo mobile de gestão financeira pessoal que utiliza intelig
 ## Estrutura do Projeto
 
 src/
+  
   ├── assets/        # Imagens e recursos
+  
   ├── components/    # Componentes reutilizáveis
+  
   ├── hooks/         # Hooks personalizados
+  
   ├── lib/           # Bibliotecas e configurações
+  
   ├── navigation/    # Configuração de navegação
+  
   ├── screens/       # Telas do aplicativo
+  
   ├── types/         # Definições de tipos TypeScript
+  
   └── utils/         # Funções utilitárias
 
 ## Próximos Passos
