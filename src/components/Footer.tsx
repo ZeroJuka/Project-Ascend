@@ -163,9 +163,9 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         <Ionicons 
           name="flag-outline"
           size={24} 
-          color={isActive('Settings') ? "#4ADE80" : "#9CA3AF"} 
+          color={isActive('Goals') ? "#4ADE80" : "#9CA3AF"} 
         />
-        <Text style={[styles.navText, isActive('Settings') && styles.activeNavText]}>Objetivos</Text>
+        <Text style={[styles.navText, isActive('Goals') && styles.activeNavText]}>Metas</Text>
       </TouchableOpacity>
     </View>
   );

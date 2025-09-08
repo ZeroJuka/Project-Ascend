@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Alert, StyleSheet, View, Text, TouchableOpacity, Animated, Dimensions } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Button, Input } from '@rneui/themed';
 import { LinearGradient } from 'expo-linear-gradient';
+import ConfirmHcaptcha from '@hcaptcha/react-native-hcaptcha';
 
 interface AuthProps {
   onAuthSuccess?: () => void;
@@ -16,9 +17,10 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
+  const [captchaToken, setCaptchaToken] = useState()
+  const captcha = useRef<any>(null)
 
   useEffect(() => {
-    // Ajusta a posição inicial com base no modo
     slideAnim.setValue(isLogin ? 0 : screenWidth * 0.4);
   }, []);
 
@@ -47,8 +49,6 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
     if (error) {
       Alert.alert('Erro ao entrar', error.message);
     } else {
-      // Não precisamos chamar onAuthSuccess aqui, pois o AppNavigator já vai redirecionar
-      // baseado na mudança de estado da sessão
       console.log('Login bem-sucedido');
     }
     
@@ -65,7 +65,9 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
     const { data, error } = await supabase.auth.signUp({
       email: email,
       password: password,
+      options: { captchaToken },
     });
+    captcha.current?.hide()
 
     if (error) {
       Alert.alert('Erro ao cadastrar', error.message);
@@ -79,8 +81,6 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
         tension: 40
       }).start();
     } else {
-      // Não precisamos chamar onAuthSuccess aqui, pois o AppNavigator já vai redirecionar
-      // baseado na mudança de estado da sessão
       console.log('Cadastro e login bem-sucedidos');
     }
     
@@ -135,11 +135,30 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
           inputStyle={styles.inputText}
           containerStyle={styles.inputContainer}
         />
+
+        <ConfirmHcaptcha
+          ref={captcha}
+          siteKey={process.env.HCAPTCHA_SITE_KEY || ''}
+          languageCode="pt"
+          baseUrl={'https://hcaptcha.com'}
+          onMessage={(event: any) => {
+            if (event && event.nativeEvent && event.nativeEvent.data) {
+              setCaptchaToken(event.nativeEvent.data);
+              console.log('Captcha token:', event.nativeEvent.data);
+              signUpWithEmail();
+            }
+          }}
+          size={'normal'}
+        />
         
         <Button
           title={isLogin ? 'Entrar' : 'Cadastrar'}
           disabled={loading}
-          onPress={isLogin ? signInWithEmail : signUpWithEmail}
+          onPress={isLogin ? signInWithEmail : () => {
+            if (!isLogin) {
+              captcha.current?.show();
+            }
+          }}
           buttonStyle={styles.button}
           loading={loading}
           loadingProps={{ color: '#1F2937' }}

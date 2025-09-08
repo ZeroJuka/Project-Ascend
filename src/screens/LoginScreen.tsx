@@ -6,7 +6,6 @@ import Header from '../components/Header';
 
 export default function LoginScreen() {
   const handleAuthSuccess = () => {
-    // Não precisamos navegar manualmente, o AppNavigator já faz isso
     console.log('Autenticação bem-sucedida');
   };
 
@@ -17,7 +16,7 @@ export default function LoginScreen() {
     >
       <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
       <SafeAreaView style={styles.container}>
-        <Header title="Login" showProfileButton={false} />
+        { /*<Header title="Login" showProfileButton={false} />*/ }
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
@@ -28,8 +27,8 @@ export default function LoginScreen() {
               style={styles.logo} 
               resizeMode="contain"
             />
-            <Text style={styles.appName}>Project Ascend</Text>
-            <Text style={styles.tagline}>Elevando sua experiência</Text>
+            <Text style={styles.appName}>Ascend Financial</Text>
+            <Text style={styles.tagline}>O controle financeiro começa com uma conversa</Text>
           </View>
           
           <Auth onAuthSuccess={handleAuthSuccess} initialMode="login" />

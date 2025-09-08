@@ -9,6 +9,8 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@hcaptcha/react-hcaptcha": "^1.12.1",
+    "@hcaptcha/react-native-hcaptcha": "^2.0.5",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "^8.4.4",
     "@react-navigation/native": "^7.1.17",
@@ -16,18 +18,22 @@
     "@rneui/base": "^4.0.0-rc.8",
     "@rneui/themed": "^4.0.0-rc.8",
     "@supabase/supabase-js": "^2.54.0",
+    "check-prop-types": "^1.1.2",
     "expo": "~53.0.20",
     "expo-av": "^15.1.7",
     "expo-linear-gradient": "^14.1.5",
     "expo-speech": "^13.1.7",
     "expo-status-bar": "~2.2.3",
+    "prop-types": "^15.8.1",
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-chart-kit": "^6.12.0",
+    "react-native-modal": "^13.0.1",
     "react-native-safe-area-context": "^5.6.1",
     "react-native-screens": "^4.16.0",
     "react-native-svg": "^15.12.1",
-    "react-native-url-polyfill": "^2.0.0"
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-webview": "^13.16.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

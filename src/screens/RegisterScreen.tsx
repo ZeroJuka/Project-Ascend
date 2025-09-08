@@ -6,14 +6,13 @@ import Header from '../components/Header';
 
 export default function RegisterScreen() {
   const handleAuthSuccess = () => {
-    // Não precisamos navegar manualmente, o AppNavigator já faz isso
     console.log('Cadastro bem-sucedido');
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <Header title="Cadastro" showProfileButton={false} />
+      { /*<Header title="Cadastro" showProfileButton={false} />*/ }
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
@@ -24,7 +23,7 @@ export default function RegisterScreen() {
             style={styles.logo} 
             resizeMode="contain"
           />
-          <Text style={styles.appName}>Project Ascend</Text>
+          <Text style={styles.appName}>Ascend Financial</Text>
           <Text style={styles.tagline}>Crie sua conta</Text>
         </View>
         
