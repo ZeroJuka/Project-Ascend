@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { categoryService } from '../lib/categoryService';
 import { Category, CategoryFormData } from '../types/category';
 import { commonStyles } from '../utils/Styles';
+import { theme } from '../utils/theme';
 
 // Cores disponíveis para seleção
 const AVAILABLE_COLORS = [
@@ -67,6 +68,7 @@ export default function CategoryManager({
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [formData, setFormData] = useState<CategoryFormData>({
     name: '',
     icon: 'ellipsis-horizontal-outline',
@@ -83,7 +85,9 @@ export default function CategoryManager({
     try {
       setLoading(true);
       const data = await categoryService.getCategories();
-      setCategories(data);
+      // Filtrar apenas categorias personalizadas (com user_id não nulo)
+      const customCategories = data.filter(category => category.user_id !== null);
+      setCategories(customCategories);
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível carregar as categorias');
       console.error(error);
@@ -129,30 +133,65 @@ export default function CategoryManager({
     }
   };
 
-  const renderCategoryItem = ({ item }: { item: Category }) => {
-    // Não permitir excluir categorias padrão (user_id é null)
-    const isDefaultCategory = item.user_id === null;
+  const handleEditCategory = (category: Category) => {
+    setFormData({
+      name: category.name,
+      icon: category.icon,
+      color: category.color
+    });
+    setEditingCategoryId(category.id);
+    setShowAddForm(true);
+  };
 
+  const handleUpdateCategory = async () => {
+    try {
+      if (!formData.name.trim()) {
+        Alert.alert('Erro', 'O nome da categoria é obrigatório');
+        return;
+      }
+
+      const updatedCategory = await categoryService.updateCategory(editingCategoryId!, formData);
+      setCategories(categories.map(cat => cat.id === editingCategoryId ? updatedCategory : cat));
+      setShowAddForm(false);
+      setFormData({
+        name: '',
+        icon: 'ellipsis-horizontal-outline',
+        color: '#6B7280',
+      });
+      setEditingCategoryId(null);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível atualizar a categoria');
+      console.error(error);
+    }
+  };
+
+  const renderCategoryItem = ({ item }: { item: Category }) => {
     return (
-      <View style={styles.categoryItem}>
-        <View style={styles.categoryItem}>
-          <View style={[styles.categoryIcon, { backgroundColor: item.color }]}>
-            <Ionicons name={item.icon as any} size={20} color="#fff" />
-          </View>
-          <Text style={styles.categoryName}>{item.name}</Text>
+      <TouchableOpacity 
+        style={styles.categoryCard}
+        onPress={() => handleCategorySelected(item)}
+      >
+        <View style={[styles.categoryIcon, { backgroundColor: item.color }]}>
+          <Ionicons name={item.icon as any} size={20} color="#fff" />
         </View>
+        <Text style={styles.categoryName} numberOfLines={1}>{item.name}</Text>
         
-        <View style={styles.categoryItem}>
-          {!isDefaultCategory && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeleteCategory(item.id)}
-            >
-              <Ionicons name="trash-outline" size={18} color="#F87171" />
-            </TouchableOpacity>
-          )}
+        <View style={styles.categoryActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleEditCategory(item)}
+          >
+            <Ionicons name="pencil-outline" size={16} color={theme.colors.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleDeleteCategory(item.id)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#F87171" />
+          </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -183,11 +222,28 @@ export default function CategoryManager({
                     renderItem={renderCategoryItem}
                     keyExtractor={(item) => item.id}
                     style={styles.categoryList}
+                    numColumns={2}
+                    columnWrapperStyle={styles.categoryRow}
+                    ListEmptyComponent={
+                      <View style={styles.emptyContainer}>
+                        <Ionicons name="folder-open-outline" size={48} color={theme.colors.border} />
+                        <Text style={styles.emptyText}>Nenhuma categoria personalizada</Text>
+                        <Text style={styles.emptySubtext}>Crie suas próprias categorias</Text>
+                      </View>
+                    }
                   />
                   
                   <TouchableOpacity
                     style={styles.addButton}
-                    onPress={() => setShowAddForm(true)}
+                    onPress={() => {
+                      setEditingCategoryId(null);
+                      setFormData({
+                        name: '',
+                        icon: 'ellipsis-horizontal-outline',
+                        color: '#6B7280',
+                      });
+                      setShowAddForm(true);
+                    }}
                   >
                     <Ionicons name="add-outline" size={20} color="#fff" />
                     <Text style={styles.addButtonText}>Nova Categoria</Text>
@@ -195,7 +251,7 @@ export default function CategoryManager({
                 </>
               ) : (
                 <View style={styles.addForm}>
-                  <Text style={styles.formTitle}>Nova Categoria</Text>
+                  <Text style={styles.formTitle}>{editingCategoryId ? 'Editar Categoria' : 'Nova Categoria'}</Text>
                   
                   <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Nome</Text>
@@ -258,6 +314,7 @@ export default function CategoryManager({
                           icon: 'ellipsis-horizontal-outline',
                           color: '#6B7280',
                         });
+                        setEditingCategoryId(null);
                       }}
                     >
                       <Text style={styles.cancelButtonText}>Cancelar</Text>
@@ -265,9 +322,9 @@ export default function CategoryManager({
                     
                     <TouchableOpacity
                       style={[styles.formButton, styles.saveButton]}
-                      onPress={handleAddCategory}
+                      onPress={editingCategoryId ? handleUpdateCategory : handleAddCategory}
                     >
-                      <Text style={styles.saveButtonText}>Salvar</Text>
+                      <Text style={styles.saveButtonText}>{editingCategoryId ? 'Atualizar' : 'Salvar'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -287,7 +344,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -302,39 +359,54 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.text,
   },
   categoryList: {
     maxHeight: 400,
   },
-  categoryItem: {
-    flexDirection: 'row',
+  categoryCard: {
+    width: '48%',
+    backgroundColor: theme.colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    marginHorizontal: '1%',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   categoryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginBottom: 8,
   },
   categoryName: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  deleteButton: {
-    padding: 8,
+  categoryActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  actionButton: {
+    padding: 6,
+    marginHorizontal: 4,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4ADE80',
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     padding: 12,
     marginTop: 16,
@@ -343,6 +415,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  categoryRow: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: theme.colors.border,
+    marginTop: 4,
   },
   addForm: {
     padding: 16,
@@ -421,7 +513,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   saveButton: {
-    backgroundColor: '#4ADE80',
+    backgroundColor: theme.colors.primary,
     marginLeft: 8,
   },
   saveButtonText: {

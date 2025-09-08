@@ -23,6 +23,21 @@ export const colors = {
   }
 };
 
+// Tema padrão (light mode)
+export const theme = {
+  colors: {
+    primary: colors.primary,
+    secondary: colors.secondary,
+    tertiary: colors.tertiary,
+    quaternary: colors.quaternary,
+    background: colors.light.background,
+    text: colors.light.text,
+    subtext: colors.light.subtext,
+    card: colors.light.card,
+    border: colors.light.border
+  }
+};
+
 export const spacing = {
   xs: 4,
   sm: 8,

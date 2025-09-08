@@ -170,7 +170,7 @@ class AudioManager {
         headers: {
           'Authorization': `Bearer ${whisperToken}`,
         },
-        body: audioBlob, // Enviar o blob diretamente
+        body: audioBlob, 
       });
       const contentType = apiResponse.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -300,10 +300,21 @@ class AudioManager {
 
   resetButtonAnimation(): void {
     this.animationState.buttonGlow.stopAnimation();
-    Animated.spring(this.animationState.buttonScale, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+
+    Animated.parallel([
+
+      Animated.spring(this.animationState.buttonScale, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+
+      //PARA DE BRILHAR PORRAA
+      Animated.spring(this.animationState.buttonGlow, {
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+      
+    ]).start();
   }
 
   startTextFadeOut(delay: number = 5000): void {

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,12 +14,10 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
   
-  // Se activeScreen não for fornecido, use o nome da rota atual
   const currentScreen = activeScreen || (route.name as keyof RootStackParamList);
 
   const isActive = (screen: string) => currentScreen === screen;
 
-  // Estados e refs para o botão de áudio
   const [isListening, setIsListening] = useState(false);
   const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -31,11 +29,10 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
     };
   }, []);
 
-  // Funções para gerenciar gravação de áudio
+
   const startRecording = async () => {
     const success = await audioManager.startRecording();
     if (success) {
-      // Feedback visual de que está gravando
       console.log('Gravação iniciada');
     }
   };
@@ -43,13 +40,11 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
   const stopRecording = async () => {
     const result = await audioManager.stopRecording();
     if (result.success && result.transcription) {
-      // Navegar para o chat com a transcrição
       navigation.navigate('Chat');
     }
   };
 
   const handlePressIn = () => {
-    // Limpar qualquer timeout anterior
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current);
     }
@@ -81,7 +76,6 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
     }
   };
 
-  // Obter o estado de animação para usar nos componentes
   const animState = audioManager.getAnimationState();
 
   return (
@@ -136,11 +130,17 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
             }
           ]}
         >
-          <Ionicons 
-            name={isListening ? "mic" : "chatbubble-ellipses-outline"} 
-            size={30} 
-            color="#fff" 
-          />
+          {isListening ? (
+            <Ionicons name="mic" size={30} color="#ffffff" />
+          ) : (
+            <Image 
+              source={require('../../assets/icon.png')} 
+              style={styles.logoImage} 
+              resizeMode="contain"
+              width={50}
+              height={50}
+            />
+          )}
         </Pressable>
       </View>
       
@@ -158,14 +158,14 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
       
       <TouchableOpacity 
         style={styles.navItem} 
-        onPress={() => console.log('Config')}
+        onPress={() => console.log('Goals')}
       >
         <Ionicons 
-          name="settings-outline" 
+          name="flag-outline"
           size={24} 
           color={isActive('Settings') ? "#4ADE80" : "#9CA3AF"} 
         />
-        <Text style={[styles.navText, isActive('Settings') && styles.activeNavText]}>Config</Text>
+        <Text style={[styles.navText, isActive('Settings') && styles.activeNavText]}>Objetivos</Text>
       </TouchableOpacity>
     </View>
   );
@@ -205,6 +205,11 @@ const styles = StyleSheet.create({
     bottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logoImage: {
+    width: 30,
+    height: 30,
+    tintColor: '#FFFFFF',
   },
   centerButtonGlow: {
     position: 'absolute',
