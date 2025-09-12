@@ -58,8 +58,6 @@ export default function HomeScreen() {
         if (fadeOutTimeout.current) {
           clearTimeout(fadeOutTimeout.current);
         }
-        
-        // Iniciar o desaparecimento gradual após 5 segundos
         audioManager.startTextFadeOut(5000);
       }
     }

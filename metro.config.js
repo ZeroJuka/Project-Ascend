@@ -5,7 +5,6 @@ module.exports = (() => {
 
   const { transformer, resolver } = config;
 
-  // Adiciona suporte para SVG
   config.transformer = {
     ...transformer,
     babelTransformerPath: require.resolve('react-native-svg-transformer'),
