@@ -11,6 +11,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ChatScreen from '../screens/ChatScreen';
 import TransactionsScreen from '../screens/TransactionsScreen';
+import GoalsScreen from '../screens/GoalsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -45,6 +46,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Transactions" component={TransactionsScreen} />
+            <Stack.Screen name="Goals" component={GoalsScreen} />
           </>
         ) : (
           // Usuário não autenticado

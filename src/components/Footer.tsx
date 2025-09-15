@@ -97,7 +97,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         onPress={() => navigation.navigate('Transactions')}
       >
         <Ionicons 
-          name="add-circle-outline" 
+          name="wallet-outline" 
           size={24} 
           color={isActive('Transactions') ? "#4ADE80" : "#9CA3AF"} 
         />
@@ -146,7 +146,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
       
       <TouchableOpacity 
         style={styles.navItem} 
-        onPress={() => console.log('Análises')}
+        onPress={() => console.log('Analytics')}
       >
         <Ionicons 
           name="pie-chart-outline" 
@@ -158,7 +158,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
       
       <TouchableOpacity 
         style={styles.navItem} 
-        onPress={() => console.log('Goals')}
+        onPress={() => navigation.navigate('Goals')}
       >
         <Ionicons 
           name="flag-outline"

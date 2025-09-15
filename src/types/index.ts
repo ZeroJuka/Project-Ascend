@@ -12,4 +12,7 @@ export type RootStackParamList = {
   Home: undefined;
   Chat: undefined;
   Transactions: undefined;
+  Goals: undefined;
 };
+
+export * from './goal';

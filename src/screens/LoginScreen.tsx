@@ -1,8 +1,7 @@
 import React from 'react';
-import { StyleSheet, View, Image, SafeAreaView, KeyboardAvoidingView, Platform, StatusBar, Text } from 'react-native';
+import { StyleSheet, View, Image, SafeAreaView, StatusBar, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Auth from '../components/Auth';
-import Header from '../components/Header';
 
 export default function LoginScreen() {
   const handleAuthSuccess = () => {
@@ -16,23 +15,17 @@ export default function LoginScreen() {
     >
       <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
       <SafeAreaView style={styles.container}>
-        { /*<Header title="Login" showProfileButton={false} />*/ }
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardAvoidingView}
-        >
-          <View style={styles.logoContainer}>
-            <Image 
-              source={require('../../assets/icon.png')} 
-              style={styles.logo} 
-              resizeMode="contain"
-            />
-            <Text style={styles.appName}>Ascend Financial</Text>
-            <Text style={styles.tagline}>O controle financeiro começa com uma conversa</Text>
-          </View>
-          
-          <Auth onAuthSuccess={handleAuthSuccess} initialMode="login" />
-        </KeyboardAvoidingView>
+        <View style={styles.logoContainer}>
+          <Image 
+            source={require('../../assets/icon.png')} 
+            style={styles.logo} 
+            resizeMode="contain"
+          />
+          <Text style={styles.appName}>Ascend Financial</Text>
+          <Text style={styles.tagline}>O controle financeiro começa com uma conversa</Text>
+        </View>
+        
+        <Auth onAuthSuccess={handleAuthSuccess} initialMode="login" />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -45,32 +38,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 80,
-    marginBottom: 20,
+    marginTop: 60,
+    marginBottom: 40,
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
     borderColor: '#4ADE80',
     backgroundColor: 'rgba(74, 222, 128, 0.1)',
-    padding: 10,
+    padding: 8,
   },
   appName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#F9FAFB',
-    marginTop: 15,
+    color: '#FFFFFF',
+    marginTop: 16,
+    textAlign: 'center',
   },
   tagline: {
     fontSize: 16,
-    color: '#9CA3AF',
-    marginTop: 5,
+    color: '#D1D5DB',
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 });
