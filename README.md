@@ -146,7 +146,7 @@ GEMINI_API_KEY=sua_chave_gemini
 
 4. **Execute o projeto**
 ```bash
-npm start
+npx expo start
 ```
 
 5. **Execute em dispositivo/emulador**
@@ -221,32 +221,6 @@ Encontrou um bug? Abra uma [issue](https://github.com/seu-usuario/ascend/issues)
 ## 📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-## 👥 Equipe
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <a href="https://github.com/seu-usuario">
-          <img src="https://github.com/seu-usuario.png" width="100px;" alt=""/>
-          <br />
-          <sub><b>Seu Nome</b></sub>
-        </a>
-        <br />
-        <sub>Desenvolvedor Principal</sub>
-      </td>
-    </tr>
-  </table>
-</div>
-
-## 📞 Contato
-
-- **Email**: contato@ascend.app
-- **LinkedIn**: [Seu LinkedIn](https://linkedin.com/in/seu-perfil)
-- **Website**: [www.ascend.app](https://ascend.app)
-
----
 
 <div align="center">
   <p>Feito com ❤️ para revolucionar sua gestão financeira</p>
