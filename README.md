@@ -1,51 +1,254 @@
-# ASCEND - Assistente Financeiro Pessoal
+# 🚀 ASCEND - Gestão Financeira Inteligente
 
-## Sobre o Projeto
+<div align="center">
+  <img src="./assets/icon.png" alt="ASCEND Logo" width="120" height="120">
+  
+  **Transforme sua vida financeira com clareza e inteligência artificial**
+  
+  [![React Native](https://img.shields.io/badge/React%20Native-0.81.4-blue.svg)](https://reactnative.dev/)
+  [![Expo](https://img.shields.io/badge/Expo-54.0.7-black.svg)](https://expo.dev/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.9.2-blue.svg)](https://www.typescriptlang.org/)
+  [![Supabase](https://img.shields.io/badge/Supabase-2.54.0-green.svg)](https://supabase.com/)
+  [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+</div>
 
-ASCEND é um aplicativo mobile de gestão financeira pessoal que utiliza inteligência artificial (ATLAS) para ajudar os usuários a administrar suas finanças, desde grandes custos e dívidas até pequenas despesas indispensáveis.
+## 📱 Sobre o Projeto
 
-## Tecnologias Utilizadas
+**ASCEND** é um aplicativo mobile de gestão financeira pessoal que revoluciona a forma como você controla suas finanças. Focado em **clareza** e **objetividade**, o app utiliza inteligência artificial para automatizar processos e fornecer insights valiosos sobre seus gastos.
 
-- React Native com Expo
-- TypeScript
-- Supabase (Autenticação e Banco de Dados)
-- React Navigation
+### 🎯 Missão
+Ajudar usuários a organizarem suas finanças e identificarem rapidamente pontos problemáticos em seu orçamento, capacitando-os a tomar decisões financeiras informadas.
 
-## Funcionalidades Implementadas
+### ✨ Diferenciais
+- **🤖 IA Integrada**: Categorização automática de despesas com Google Gemini
+- **📊 Dashboards Visuais**: Interface limpa e intuitiva para análise rápida
+- **🎯 Metas Inteligentes**: Sistema de acompanhamento de objetivos financeiros
+- **💬 Assistente Virtual ATLAS**: Controle por voz e chat inteligente
+- **📈 Análises Preditivas**: Insights sobre padrões e tendências de gastos
 
-- Autenticação de usuários (login e cadastro)
-- Tela inicial básica
+## 🛠️ Tecnologias Utilizadas
 
-## Requisitos
+### Frontend
+- **React Native** - Framework multiplataforma
+- **Expo** - Plataforma de desenvolvimento
+- **TypeScript** - Tipagem estática
+- **React Navigation** - Navegação entre telas
+- **React Native Elements** - Componentes UI
 
-- Node.js
-- npm
-- Expo CLI
+### Backend & Serviços
+- **Supabase** - Backend as a Service
+- **PostgreSQL** - Banco de dados
+- **Google Gemini AI** - Inteligência artificial
+- **Expo Speech** - Síntese de voz
+- **Expo AV** - Processamento de áudio
 
-## Estrutura do Projeto
+### Visualização de Dados
+- **React Native Chart Kit** - Gráficos e relatórios
+- **React Native SVG** - Gráficos vetoriais
+- **Expo Linear Gradient** - Gradientes visuais
 
+## 🚀 Funcionalidades Principais
+
+### 💰 Gestão Financeira
+- ✅ Registro rápido de transações
+- ✅ Categorização automática com IA
+- ✅ Controle de receitas e despesas
+- ✅ Múltiplas categorias personalizáveis
+
+### 📊 Análises e Relatórios
+- ✅ Dashboard principal com visão geral
+- ✅ Gráficos interativos (pizza, barras, linhas)
+- ✅ Comparação entre períodos
+- ✅ Alertas de orçamento
+
+### 🎯 Metas e Objetivos
+- ✅ Criação de metas financeiras
+- ✅ Acompanhamento visual de progresso
+- ✅ Notificações e lembretes
+- ✅ Análise de viabilidade
+
+### 🤖 Assistente IA (ATLAS)
+- ✅ Chat inteligente para suporte
+- ✅ Comandos por voz
+- ✅ Análises preditivas
+- ✅ Sugestões personalizadas
+
+### 🔐 Segurança e Privacidade
+- ✅ Autenticação segura
+- ✅ Criptografia de dados
+- ✅ Backup automático
+- ✅ Sincronização entre dispositivos
+
+## 📱 Screenshots
+
+<div align="center">
+  <img src="./docs/screenshots/home.png" alt="Tela Principal" width="200">
+  <img src="./docs/screenshots/transactions.png" alt="Transações" width="200">
+  <img src="./docs/screenshots/goals.png" alt="Metas" width="200">
+  <img src="./docs/screenshots/chat.png" alt="Chat IA" width="200">
+</div>
+
+## 🏗️ Arquitetura do Projeto
+
+```
 src/
-  
-  ├── assets/        # Imagens e recursos
-  
-  ├── components/    # Componentes reutilizáveis
-  
-  ├── hooks/         # Hooks personalizados
-  
-  ├── lib/           # Bibliotecas e configurações
-  
-  ├── navigation/    # Configuração de navegação
-  
-  ├── screens/       # Telas do aplicativo
-  
-  ├── types/         # Definições de tipos TypeScript
-  
-  └── utils/         # Funções utilitárias
+├── components/          # Componentes reutilizáveis
+│   ├── Auth.tsx        # Autenticação
+│   ├── Header.tsx      # Cabeçalho
+│   └── Footer.tsx      # Rodapé
+├── screens/            # Telas do aplicativo
+│   ├── HomeScreen.tsx  # Dashboard principal
+│   ├── TransactionsScreen.tsx
+│   ├── GoalsScreen.tsx
+│   └── ChatScreen.tsx
+├── lib/                # Serviços e integrações
+│   ├── supabase.ts     # Cliente Supabase
+│   ├── genai.ts        # Google Gemini AI
+│   └── audio.ts        # Processamento de áudio
+├── types/              # Definições TypeScript
+├── utils/              # Utilitários e estilos
+└── navigation/         # Configuração de rotas
+```
 
-## Próximos Passos
+## 🚀 Como Executar
 
-- Implementar gerenciamento de contas bancárias
-- Adicionar registro e categorização de transações
-- Integrar modelos de IA para análise financeira
-- Implementar relatórios e análises
-- Adicionar notificações e lembretes
+### Pré-requisitos
+- Node.js (v18 ou superior)
+- npm ou yarn
+- Expo CLI
+- Conta no Supabase
+- API Key do Google Gemini
+
+### Instalação
+
+1. **Clone o repositório**
+```bash
+git clone https://github.com/seu-usuario/ascend.git
+cd ascend
+```
+
+2. **Instale as dependências**
+```bash
+npm install
+```
+
+3. **Configure as variáveis de ambiente**
+```bash
+cp .env.example .env
+```
+
+Edite o arquivo `.env` com suas credenciais:
+```env
+SUPABASE_URL=sua_url_supabase
+SUPABASE_ANON_KEY=sua_chave_anonima
+GEMINI_API_KEY=sua_chave_gemini
+```
+
+4. **Execute o projeto**
+```bash
+npm start
+```
+
+5. **Execute em dispositivo/emulador**
+```bash
+# Android
+npm run android
+
+# iOS
+npm run ios
+
+# Web
+npm run web
+```
+
+## 📊 Estrutura do Banco de Dados
+
+### Tabelas Principais
+- **users** - Dados dos usuários
+- **transactions** - Transações financeiras
+- **categories** - Categorias de gastos
+- **goals** - Metas financeiras
+- **budgets** - Orçamentos
+
+### Relacionamentos
+```sql
+users (1) → (N) transactions
+users (1) → (N) goals
+categories (1) → (N) transactions
+goals (1) → (N) transactions (filtradas)
+```
+
+## 🤝 Contribuindo
+
+Contribuições são sempre bem-vindas! Para contribuir:
+
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+### 📋 Guidelines de Contribuição
+- Siga os padrões de código TypeScript
+- Adicione testes para novas funcionalidades
+- Mantenha a documentação atualizada
+- Use commits semânticos
+
+## 🐛 Reportar Bugs
+
+Encontrou um bug? Abra uma [issue](https://github.com/seu-usuario/ascend/issues) com:
+- Descrição detalhada do problema
+- Passos para reproduzir
+- Screenshots (se aplicável)
+- Informações do dispositivo/sistema
+
+## 📈 Roadmap
+
+### 🎯 Próximas Funcionalidades
+- [ ] Modo família para compartilhamento
+- [ ] Integração com bancos (Open Banking)
+- [ ] Análises avançadas com ML
+- [ ] Modo offline completo
+- [ ] Exportação de relatórios PDF
+- [ ] Notificações push inteligentes
+
+### 🌟 Versões Futuras
+- [ ] Versão web responsiva
+- [ ] API pública para desenvolvedores
+- [ ] Marketplace de plugins
+- [ ] Integração com assistentes virtuais
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 👥 Equipe
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <a href="https://github.com/seu-usuario">
+          <img src="https://github.com/seu-usuario.png" width="100px;" alt=""/>
+          <br />
+          <sub><b>Seu Nome</b></sub>
+        </a>
+        <br />
+        <sub>Desenvolvedor Principal</sub>
+      </td>
+    </tr>
+  </table>
+</div>
+
+## 📞 Contato
+
+- **Email**: contato@ascend.app
+- **LinkedIn**: [Seu LinkedIn](https://linkedin.com/in/seu-perfil)
+- **Website**: [www.ascend.app](https://ascend.app)
+
+---
+
+<div align="center">
+  <p>Feito com ❤️ para revolucionar sua gestão financeira</p>
+  <p>⭐ Se este projeto te ajudou, considere dar uma estrela!</p>
+</div>
