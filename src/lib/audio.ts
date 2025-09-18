@@ -24,11 +24,11 @@ interface AnimationState {
 const recordingOptions = {
   // Configurações para Android
   android: {
-      extension: '.mp4', 
+      extension: '.m4a', 
       outputFormat: Audio.AndroidOutputFormat.MPEG_4,
       audioEncoder: Audio.AndroidAudioEncoder.AAC,
       sampleRate: 44100,
-      numberOfChannels: 2,
+      numberOfChannels: 1, // Mono para reduzir tamanho
       bitRate: 128000,
   },
   // Configurações para iOS
@@ -37,13 +37,13 @@ const recordingOptions = {
       outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
       audioQuality: Audio.IOSAudioQuality.MAX,
       sampleRate: 44100,
-      numberOfChannels: 2,
+      numberOfChannels: 1, // Mono para reduzir tamanho
       bitRate: 128000,
       linearPCMBitDepth: 16,
       linearPCMIsBigEndian: false,
       linearPCMIsFloat: false,
   },
-  // Configurações para Web... Pq vai q ne
+  // Configurações para Web
   web: { 
     mimeType: 'audio/webm',
     bitsPerSecond: 128000,
@@ -146,55 +146,174 @@ class AudioManager {
   }
 
   //Usa o Whisper pra transcrever o Audio
+  // Verificar conectividade de rede
+  private async checkNetworkConnectivity(): Promise<boolean> {
+    try {
+      const response = await fetch('https://www.google.com', {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-cache'
+      });
+      return true;
+    } catch (error) {
+      console.warn('Sem conectividade de rede detectada');
+      return false;
+    }
+  }
+
+  // Função auxiliar para retry com backoff
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Tentativa ${attempt + 1}/${maxRetries} falhou:`, error);
+        
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+          console.info(`Aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    throw lastError!;
+  }
+
   async transcribeAudio(uri: string): Promise<string> {
     try {
       console.warn(`
         ==================================================
-        Whisper Key Used: ${whisperToken}
-        URI Fetched: ${whisperUri}
+        Whisper Key Used: ${whisperToken ? 'Configurado' : 'NÃO CONFIGURADO'}
+        URI Fetched: ${whisperUri || 'NÃO CONFIGURADO'}
         ==================================================
       `);
       console.info('Starting transcription...');
 
+      // Validações iniciais
       if (!uri) {
         console.error('URI de áudio inválido');
-        return '';
+        return 'Erro: URI de áudio inválido';
       }
-      
-      // Obter o arquivo de áudio como blob
-      const audioResponse = await fetch(uri);
-      const audioBlob = await audioResponse.blob();
-      
-      const apiResponse = await fetch(whisperUri, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${whisperToken}`,
-        },
-        body: audioBlob, 
-      });
-      const contentType = apiResponse.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const textResponse = await apiResponse.text();
-        console.error('Resposta não-JSON da API:', textResponse);
-        return 'Erro: Serviço de transcrição indisponível. Verifique se o token é válido.';
-      }
-      
-      const data = await apiResponse.json();
-      console.info('Transcription data:', JSON.stringify(data),
-        'Transcription Uri:', uri
-      );
 
-      if (data.text) {
-        return data.text;
-      } else if (data.error) {
-        console.error('Erro na API de transcrição:', data.error);
-        return 'Erro: ' + data.error;
+      if (!whisperToken || !whisperUri) {
+        console.error('Configurações do Whisper não encontradas');
+        return 'Erro: Configurações de transcrição não encontradas. Verifique as variáveis de ambiente.';
       }
+
+      // Verificar conectividade
+      const hasNetwork = await this.checkNetworkConnectivity();
+      if (!hasNetwork) {
+        return 'Erro: Sem conexão com a internet. Verifique sua conectividade.';
+      }
+
+      // Validar formato do arquivo
+      const fileExtension = uri.split('.').pop()?.toLowerCase();
+      const supportedFormats = ['m4a', 'wav', 'mp3', 'ogg', 'flac', 'webm'];
       
-      return 'Não foi possível transcrever o áudio';
+      if (!fileExtension || !supportedFormats.includes(fileExtension)) {
+        console.error(`Formato de arquivo não suportado: ${fileExtension}`);
+        return 'Erro: Formato de áudio não suportado';
+      }
+
+      console.info(`Processando arquivo de áudio: ${fileExtension}`);
+      
+      // Função para fazer a transcrição com retry
+      const performTranscription = async (): Promise<string> => {
+        // Obter o arquivo de áudio como blob
+        console.info('Carregando arquivo de áudio...');
+        const audioResponse = await fetch(uri);
+        
+        if (!audioResponse.ok) {
+          throw new Error(`Falha ao carregar arquivo de áudio: ${audioResponse.status}`);
+        }
+        
+        const audioBlob = await audioResponse.blob();
+        console.info(`Arquivo carregado: ${audioBlob.size} bytes`);
+
+        // Criar FormData para envio correto
+        const formData = new FormData();
+        formData.append('file', audioBlob, `audio.${fileExtension}`);
+        
+        console.info('Enviando para API Whisper...');
+        
+        // Configurar timeout para a requisição
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos
+        
+        try {
+          const apiResponse = await fetch(whisperUri, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${whisperToken}`,
+            },
+            body: formData,
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!apiResponse.ok) {
+            const errorText = await apiResponse.text();
+            throw new Error(`API Error ${apiResponse.status}: ${errorText}`);
+          }
+          
+          const contentType = apiResponse.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const textResponse = await apiResponse.text();
+            console.error('Resposta não-JSON da API:', textResponse);
+            throw new Error('Resposta inválida da API de transcrição');
+          }
+          
+          const data = await apiResponse.json();
+          console.info('Transcription data:', JSON.stringify(data));
+
+          if (data.text) {
+            return data.text;
+          } else if (data.error) {
+            throw new Error(`API Error: ${data.error}`);
+          }
+          
+          throw new Error('Resposta da API não contém texto transcrito');
+          
+        } catch (error) {
+          clearTimeout(timeoutId);
+          if ((error as Error).name === 'AbortError') {
+            throw new Error('Timeout: A transcrição demorou muito para responder');
+          }
+          throw error;
+        }
+      };
+
+      // Executar transcrição com retry
+      const result = await this.retryWithBackoff(performTranscription, 3, 2000);
+      console.info('Transcrição concluída com sucesso');
+      return result;
+      
     } catch (error) {
       console.error('Erro ao transcrever áudio:', error);
-      return 'Erro na transcrição. Tente novamente.';
+      
+      // Mensagens de erro mais específicas
+      if ((error as Error).message.includes('Network request failed')) {
+        return 'Erro: Falha na conexão de rede. Verifique sua internet e tente novamente.';
+      } else if ((error as Error).message.includes('Timeout')) {
+        return 'Erro: Timeout na transcrição. O serviço pode estar sobrecarregado.';
+      } else if ((error as Error).message.includes('API Error')) {
+        return `Erro: ${(error as Error).message}`;
+      } else if ((error as Error).message.includes('401')) {
+        return 'Erro: Token de autenticação inválido. Verifique suas credenciais.';
+      } else if ((error as Error).message.includes('429')) {
+        return 'Erro: Muitas requisições. Aguarde um momento e tente novamente.';
+      } else {
+        return `Erro na transcrição: ${(error as Error).message}`;
+      }
     }
   }
 
