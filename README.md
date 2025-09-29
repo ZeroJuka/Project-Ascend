@@ -79,15 +79,6 @@ Ajudar usuários a organizarem suas finanças e identificarem rapidamente pontos
 - ✅ Backup automático
 - ✅ Sincronização entre dispositivos
 
-## 📱 Screenshots
-
-<div align="center">
-  <img src="./docs/screenshots/home.png" alt="Tela Principal" width="200">
-  <img src="./docs/screenshots/transactions.png" alt="Transações" width="200">
-  <img src="./docs/screenshots/goals.png" alt="Metas" width="200">
-  <img src="./docs/screenshots/chat.png" alt="Chat IA" width="200">
-</div>
-
 ## 🏗️ Arquitetura do Projeto
 
 ```
