@@ -123,6 +123,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
+    paddingBottom: 220,
   },
   messageContainer: {
     maxWidth: '80%',
@@ -153,6 +154,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F2937',
     borderTopWidth: 1,
     borderTopColor: '#374151',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 130,
+    zIndex: 10,
   },
   input: {
     flex: 1,
