@@ -146,7 +146,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
       
       <TouchableOpacity 
         style={styles.navItem} 
-        onPress={() => console.log('Analytics')}
+        onPress={() => navigation.navigate('Analytics')}
       >
         <Ionicons 
           name="pie-chart-outline" 

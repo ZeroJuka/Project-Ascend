@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Chat: undefined;
   Transactions: undefined;
   Goals: undefined;
+  Analytics: undefined;
 };
 
 export * from './goal';
