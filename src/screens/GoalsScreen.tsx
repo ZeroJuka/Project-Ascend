@@ -596,6 +596,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     position: 'relative',
+    paddingTop: 80, // Espaço para evitar sobreposição com o Header
   },
   listContainer: {
     padding: spacing.md,

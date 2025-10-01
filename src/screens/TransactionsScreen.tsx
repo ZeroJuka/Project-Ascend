@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -20,6 +20,7 @@ export default function TransactionsScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES as Category[]);
   const [loading, setLoading] = useState(true);
+  const [isChartCollapsed, setIsChartCollapsed] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -36,6 +37,64 @@ export default function TransactionsScreen() {
     loadTransactions();
     loadCategories();
   }, []);
+
+  // Infos da Home (saldo, receitas, gastos) com base nas transações do Supabase
+  const incomeTotal = useMemo(
+    () => transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
+  const expenseTotal = useMemo(
+    () => transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
+    [transactions]
+  );
+  const balanceTotal = useMemo(() => incomeTotal - expenseTotal, [incomeTotal, expenseTotal]);
+
+  // Série do fluxo de caixa (últimos 6 meses) com dados do Supabase
+  const monthLabelsPt = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const cashFlowData = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - (5 - i));
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+
+    const incomeByMonth = months.map(({ year, month }) =>
+      transactions
+        .filter(t => t.type === 'income')
+        .filter(t => {
+          const dt = new Date(t.date);
+          return dt.getFullYear() === year && dt.getMonth() === month;
+        })
+        .reduce((sum, t) => sum + t.amount, 0)
+    );
+    const expenseByMonth = months.map(({ year, month }) =>
+      transactions
+        .filter(t => t.type === 'expense')
+        .filter(t => {
+          const dt = new Date(t.date);
+          return dt.getFullYear() === year && dt.getMonth() === month;
+        })
+        .reduce((sum, t) => sum + t.amount, 0)
+    );
+
+    return {
+      labels: months.map(m => monthLabelsPt[m.month]),
+      datasets: [
+        {
+          data: incomeByMonth,
+          color: (opacity = 1) => `rgba(74, 222, 128, ${opacity})`,
+          strokeWidth: 2,
+        },
+        {
+          data: expenseByMonth,
+          color: (opacity = 1) => `rgba(248, 113, 113, ${opacity})`,
+          strokeWidth: 2,
+        },
+      ],
+      legend: ['Receitas', 'Despesas'],
+    };
+  }, [transactions]);
 
   const loadTransactions = async () => {
     try {
@@ -237,86 +296,67 @@ export default function TransactionsScreen() {
           </View>
         ) : (
           <>
-            {/* Renko Chart */}
+            {/* Gráfico de Fluxo de Caixa (dados do Supabase) */}
             <View style={styles.chartContainer}>
-              <Text style={styles.chartTitle}>Fluxo de Caixa</Text>
-              <LineChart
-                data={{
-                  labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
-                  datasets: [
-                    {
-                      data: [
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100
-                      ],
-                      color: (opacity = 1) => `rgba(74, 222, 128, ${opacity})`,
-                      strokeWidth: 2
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>Fluxo de Caixa</Text>
+                <TouchableOpacity
+                  style={styles.collapseButton}
+                  onPress={() => setIsChartCollapsed(prev => !prev)}
+                >
+                  <Ionicons name={isChartCollapsed ? 'chevron-down-outline' : 'chevron-up-outline'} size={16} color="#fff" />
+                  <Text style={styles.collapseText}>{isChartCollapsed ? 'Expandir' : 'Recolher'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {!isChartCollapsed && (
+                <LineChart
+                  data={cashFlowData}
+                  width={Dimensions.get('window').width - 32}
+                  height={220}
+                  chartConfig={{
+                    backgroundColor: '#1F2937',
+                    backgroundGradientFrom: '#1F2937',
+                    backgroundGradientTo: '#1F2937',
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                    style: {
+                      borderRadius: 16
                     },
-                    {
-                      data: [
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100,
-                        Math.random() * 100
-                      ],
-                      color: (opacity = 1) => `rgba(248, 113, 113, ${opacity})`,
-                      strokeWidth: 2
+                    propsForDots: {
+                      r: '6',
+                      strokeWidth: '2',
+                      stroke: '#ffa726'
                     }
-                  ],
-                  legend: ['Receitas', 'Despesas']
-                }}
-                width={Dimensions.get('window').width - 32}
-                height={220}
-                chartConfig={{
-                  backgroundColor: '#1F2937',
-                  backgroundGradientFrom: '#1F2937',
-                  backgroundGradientTo: '#1F2937',
-                  decimalPlaces: 0,
-                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                  labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                  style: {
+                  }}
+                  bezier
+                  style={{
+                    marginVertical: 8,
                     borderRadius: 16
-                  },
-                  propsForDots: {
-                    r: '6',
-                    strokeWidth: '2',
-                    stroke: '#ffa726'
-                  }
-                }}
-                bezier
-                style={{
-                  marginVertical: 8,
-                  borderRadius: 16
-                }}
-              />
+                  }}
+                />
+              )}
             </View>
             
+            {/* Infos da Home: Saldo, Receitas e Gastos */}
+            <View style={styles.balanceCard}>
+              <Text style={styles.balanceLabel}>Saldo Total</Text>
+              <Text style={styles.balanceAmount}>{formatCurrency(balanceTotal)}</Text>
+            </View>
+
             <View style={styles.summaryContainer}>
               <View style={[styles.summaryCard, { backgroundColor: 'rgba(74, 222, 128, 0.9)' }]}>
                 <Text style={styles.summaryLabel}>Receitas</Text>
                 <Text style={styles.summaryAmount}>
-                  {formatCurrency(
-                    transactions
-                      .filter((t) => t.type === 'income')
-                      .reduce((sum, t) => sum + t.amount, 0)
-                  )}
+                  {formatCurrency(incomeTotal)}
                 </Text>
               </View>
               
               <View style={[styles.summaryCard, { backgroundColor: 'rgba(248, 113, 113, 0.9)' }]}>
                 <Text style={styles.summaryLabel}>Despesas</Text>
                 <Text style={styles.summaryAmount}>
-                  {formatCurrency(
-                    transactions
-                      .filter((t) => t.type === 'expense')
-                      .reduce((sum, t) => sum + t.amount, 0)
-                  )}
+                  {formatCurrency(expenseTotal)}
                 </Text>
               </View>
             </View>
@@ -563,11 +603,30 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   chartTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
+  },
+  collapseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  collapseText: {
+    color: '#fff',
+    fontSize: 12,
+    marginLeft: 6,
   },
   summaryContainer: {
     flexDirection: 'row',

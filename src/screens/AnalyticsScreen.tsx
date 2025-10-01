@@ -6,6 +6,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { colors, spacing, borderRadius, fontSize } from '../utils/theme';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
+import { useAnalytics } from '../hooks/useAnalytics';
 
 type TabKey = 'Balanço' | 'Categorias' | 'Evolução' | 'Orçamento';
 
@@ -13,31 +14,37 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function AnalyticsScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>('Balanço');
+  const { loading, error, series, kpis, categoriesDistribution, achievements } = useAnalytics();
 
   const chartWidth = useMemo(() => screenWidth - 32, []);
 
+  const currency = (n: number) =>
+    `R$ ${Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
+  const pctText = (n: number) => `${(n >= 0 ? '+' : '')}${n.toFixed(1)}%`;
+
   const balanceBarData = {
-    labels: ['Jan', 'Fev', 'Mar'],
+    labels: series?.labels || [],
     datasets: [
-      { data: [10200, 12000, 13000], color: () => '#34D399' },
-      { data: [8500, 9200, 9000], color: () => '#EF4444' },
+      { data: series?.income || [], color: () => '#34D399' },
+      { data: series?.expense || [], color: () => '#EF4444' },
     ],
   };
 
   const balanceLineData = {
-    labels: ['Jan', 'Fev', 'Mar'],
+    labels: series?.labels || [],
     datasets: [
-      { data: [1700, 2800, 3500], color: () => '#F59E0B', strokeWidth: 3 },
+      { data: series?.balance || [], color: () => '#F59E0B', strokeWidth: 3 },
     ],
   };
 
-  const pieData = [
-    { name: 'Moradia', population: 35, color: '#60A5FA', legendFontColor: '#fff', legendFontSize: 12 },
-    { name: 'Alimentação', population: 25, color: '#34D399', legendFontColor: '#fff', legendFontSize: 12 },
-    { name: 'Transporte', population: 15, color: '#F59E0B', legendFontColor: '#fff', legendFontSize: 12 },
-    { name: 'Saúde', population: 10, color: '#EF4444', legendFontColor: '#fff', legendFontSize: 12 },
-    { name: 'Lazer', population: 15, color: '#22D3EE', legendFontColor: '#fff', legendFontSize: 12 },
-  ];
+  const palette = ['#60A5FA','#34D399','#F59E0B','#EF4444','#22D3EE','#A78BFA','#FB923C'];
+  const pieData = (categoriesDistribution || []).map((c, idx) => ({
+    name: c.name,
+    population: c.value,
+    color: palette[idx % palette.length],
+    legendFontColor: '#fff',
+    legendFontSize: 12,
+  }));
 
   const chartConfig = {
     backgroundGradientFrom: '#1F2937',
@@ -66,7 +73,7 @@ export default function AnalyticsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="ATLAS" />
+      <Header title="Análises" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Title and period selector */}
@@ -102,8 +109,8 @@ export default function AnalyticsScreen() {
                 <Text style={styles.cardSubtitle}>Este mês</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.cardValue}>R$ 12.450</Text>
-                <View style={styles.percentPill}><Text style={styles.percentText}>+8.5%</Text></View>
+                <Text style={styles.cardValue}>{currency(kpis?.incomeThisMonth || 0)}</Text>
+                <View style={styles.percentPill}><Text style={styles.percentText}>{pctText(kpis?.changeIncomePct || 0)}</Text></View>
               </View>
             </View>
 
@@ -114,8 +121,8 @@ export default function AnalyticsScreen() {
                 <Text style={styles.cardSubtitleLight}>Este mês</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.cardValueLight}>R$ 8.750</Text>
-                <View style={[styles.percentPill, { backgroundColor: '#10B98120' }]}><Text style={[styles.percentText, { color: '#10B981' }]}>-3.2%</Text></View>
+                <Text style={styles.cardValueLight}>{currency(kpis?.expenseThisMonth || 0)}</Text>
+                <View style={[styles.percentPill, { backgroundColor: '#10B98120' }]}><Text style={[styles.percentText, { color: '#10B981' }]}>{pctText(kpis?.changeExpensePct || 0)}</Text></View>
               </View>
             </View>
 
@@ -126,8 +133,8 @@ export default function AnalyticsScreen() {
                 <Text style={styles.cardSubtitleLight}>vs mês anterior</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.cardValueLight}>R$ 3.700</Text>
-                <Text style={[styles.percentText, { color: '#10B981', marginTop: 6 }]}>+15.3%</Text>
+                <Text style={styles.cardValueLight}>{currency(kpis?.balanceThisMonth || 0)}</Text>
+                <Text style={[styles.percentText, { color: '#10B981', marginTop: 6 }]}>{pctText(kpis?.changeBalancePct || 0)}</Text>
               </View>
             </View>
 
@@ -138,13 +145,13 @@ export default function AnalyticsScreen() {
                 <Text style={styles.sectionTitle}>Conquistas Financeiras</Text>
               </View>
               <View style={styles.badgeRow}>
-                <View style={styles.statBadge}><Text style={styles.statNumber}>3</Text><Text style={styles.statLabel}>Meses consecutivos no azul</Text></View>
-                <View style={styles.statBadge}><Text style={styles.statNumber}>R$1.300</Text><Text style={styles.statLabel}>Para próxima meta</Text></View>
-                <View style={styles.statBadge}><Text style={styles.statNumber}>Gold</Text><Text style={styles.statLabel}>Nível atual</Text></View>
+                <View style={styles.statBadge}><Text style={styles.statNumber}>{achievements?.positiveMonthsStreak ?? 0}</Text><Text style={styles.statLabel}>Meses consecutivos no azul</Text></View>
+                <View style={styles.statBadge}><Text style={styles.statNumber}>{achievements?.nextGoalRemaining != null ? currency(achievements.nextGoalRemaining) : '-'}</Text><Text style={styles.statLabel}>Para próxima meta</Text></View>
+                <View style={styles.statBadge}><Text style={styles.statNumber}>{achievements?.currentTier || 'Bronze'}</Text><Text style={styles.statLabel}>Nível atual</Text></View>
               </View>
               <View style={styles.progressBar}> 
-                <View style={[styles.progressFill, { width: '74%' }]} />
-                <Text style={styles.progressText}>74%</Text>
+                <View style={[styles.progressFill, { width: `${achievements?.progressToNextTierPct ?? 0}%` }]} />
+                <Text style={styles.progressText}>{`${achievements?.progressToNextTierPct ?? 0}%`}</Text>
               </View>
             </View>
 
@@ -205,18 +212,42 @@ export default function AnalyticsScreen() {
         {activeTab === 'Evolução' && (
           <View style={{ gap: spacing.md }}>
             <View style={styles.statRow}>
-              <View style={styles.statCard}><Text style={styles.statCardTitle}>Tendência</Text><Text style={[styles.statCardHighlight,{ color: '#10B981' }]}>Crescimento</Text><Text style={styles.statCardText}>Suas receitas têm mostrado crescimento constante.</Text></View>
-              <View style={styles.statCard}><Text style={styles.statCardTitle}>Melhor Período</Text><Text style={styles.statCardHighlight}>Junho</Text><Text style={styles.statCardText}>Saldo: R$ 4.000</Text></View>
-              <View style={styles.statCard}><Text style={styles.statCardTitle}>Economia Média</Text><Text style={styles.statCardHighlight}>R$ 2.883</Text><Text style={styles.statCardText}>Por mês no período selecionado</Text></View>
+              {(() => {
+                const last3 = (series?.balance || []).slice(-3);
+                const trendUp = last3.length === 3 && last3[0] <= last3[1] && last3[1] <= last3[2];
+                const bestIdx = (series?.balance || []).reduce((best, v, i, arr) => (v > (arr[best] || 0) ? i : best), 0);
+                const bestLabel = series?.labels?.[bestIdx] || '-';
+                const bestValue = series?.balance?.[bestIdx] || 0;
+                const avg = Math.round(((series?.balance || []).reduce((a, b) => a + b, 0) / ((series?.balance || []).length || 1)) || 0);
+                return (
+                  <>
+                    <View style={styles.statCard}><Text style={styles.statCardTitle}>Tendência</Text><Text style={[styles.statCardHighlight,{ color: trendUp ? '#10B981' : '#EF4444' }]}>{trendUp ? 'Crescimento' : 'Queda'}</Text><Text style={styles.statCardText}>Saldo dos últimos meses {trendUp ? 'em alta' : 'em baixa'}.</Text></View>
+                    <View style={styles.statCard}><Text style={styles.statCardTitle}>Melhor Período</Text><Text style={styles.statCardHighlight}>{bestLabel}</Text><Text style={styles.statCardText}>Saldo: {currency(bestValue)}</Text></View>
+                    <View style={styles.statCard}><Text style={styles.statCardTitle}>Economia Média</Text><Text style={styles.statCardHighlight}>{currency(avg)}</Text><Text style={styles.statCardText}>Por mês no período selecionado</Text></View>
+                  </>
+                );
+              })()}
             </View>
           </View>
         )}
 
-        {/* ORÇAMENTO (placeholder) */}
+        {/* ORÇAMENTO */}
         {activeTab === 'Orçamento' && (
           <View style={{ gap: spacing.md }}>
-            <View style={styles.section}><Text style={styles.sectionTitle}>Planejamento de Orçamento</Text>
-              <Text style={styles.sectionText}>Configure metas mensais por categoria e acompanhe o consumo em tempo real.</Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Uso do Orçamento Mensal</Text>
+              <Text style={styles.sectionText}>Comparação entre despesas e receitas do mês.</Text>
+              <View style={[styles.progressBar, { marginTop: spacing.md }]}> 
+                {(() => {
+                  const rate = Math.min(100, Math.round(((kpis?.expenseThisMonth || 0) / Math.max(1, (kpis?.incomeThisMonth || 0))) * 100));
+                  return (
+                    <>
+                      <View style={[styles.progressFill, { width: `${rate}%`, backgroundColor: rate > 80 ? '#EF4444' : rate > 60 ? '#F59E0B' : '#22C55E' }]} />
+                      <Text style={styles.progressText}>{`${rate}%`}</Text>
+                    </>
+                  );
+                })()}
+              </View>
             </View>
           </View>
         )}
@@ -234,6 +265,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.md,
+    paddingTop: 80, // Espaço para não ficar sob o Header absoluto
     paddingBottom: 140,
   },
   pageHeader: {
