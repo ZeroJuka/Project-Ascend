@@ -30,7 +30,10 @@ export default function TransactionsScreen() {
     'book-outline', 'paw-outline', 'cafe-outline', 'shirt-outline', 'gift-outline', 'trending-up-outline', 'construct-outline',
     'brush-outline', 'color-palette-outline'
   ];
-  const colorOptions = ['#10B981', '#EF4444', '#3B82F6', '#F59E0B', '#8B5CF6', '#14B8A6', '#64748B'];
+  const colorOptions = 
+    ['#10B981', '#EF4444', '#3B82F6', '#F59E0B', '#8B5CF6', '#14B8A6', '#64748B', '#22C55E', 
+     '#06B6D4', '#F472B6', '#A855F7', '#F43F5E', '#EAB308', '#94A3B8'];
+  const [catEditing, setCatEditing] = useState<Category | null>(null);
   const width = Dimensions.get('window').width - 32;
   useEffect(() => { refresh(); }, []);
 
@@ -148,6 +151,22 @@ export default function TransactionsScreen() {
 
   const fmtCategory = (raw: string) => categoryMap[raw] ?? raw;
 
+  const findCategory = (raw: string): Category | undefined => {
+    return categories.find((c) => c.id === raw || (c as any).category_key === raw || c.name === raw);
+  };
+
+  const hexToRgb = (hex: string) => {
+    const norm = hex?.replace('#', '') || '64748B';
+    const r = parseInt(norm.substring(0, 2), 16) || 100;
+    const g = parseInt(norm.substring(2, 4), 16) || 116;
+    const b = parseInt(norm.substring(4, 6), 16) || 139;
+    return { r, g, b };
+  };
+  const pastel = (hex?: string, alpha = 0.15) => {
+    const { r, g, b } = hexToRgb(hex || '#64748B');
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
+
   const saveCategory = async () => {
     try {
       if (!newCat.name.trim()) {
@@ -239,28 +258,38 @@ export default function TransactionsScreen() {
             renderSectionHeader={({ section }) => (
               <Text style={styles.monthHeader}>{section.title}</Text>
             )}
-            renderItem={({ item }) => (
-              <View style={styles.historyItem}>
-                <View style={styles.historyLeft}>
-                  <View style={styles.historyAvatar}>
-                    <Image source={require('../../assets/icon.png')} style={{ width: 20, height: 20 }} />
-                  </View>
-                  <View style={styles.historyTextWrap}>
-                    <Text style={styles.historyTitleText} numberOfLines={1} ellipsizeMode="tail">{item.description}</Text>
-                    <Text style={styles.historySubtitleText} numberOfLines={1} ellipsizeMode="tail">{fmtCategory(item.category)}</Text>
-                  </View>
+            renderItem={({ item }) => {
+              const cat = findCategory(item.category);
+              const catColor = cat?.color || colors.light.border;
+              return (
+                <View style={[styles.historyItemWrap, { borderColor: pastel(catColor, 0.3) }]}> 
+                  <LinearGradient
+                    colors={[pastel(catColor, 0.25), colors.light.card]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={styles.historyItemInner}
+                  >
+                    <View style={styles.historyLeft}>
+                      <View style={[styles.historyAvatar, { backgroundColor: pastel(catColor, 0.25) }]}> 
+                        <Ionicons name={(cat?.icon as any) || 'pricetag-outline'} size={18} color={catColor} />
+                      </View>
+                      <View style={styles.historyTextWrap}>
+                        <Text style={styles.historyTitleText} numberOfLines={1} ellipsizeMode="tail">{item.description}</Text>
+                        <Text style={styles.historySubtitleText} numberOfLines={1} ellipsizeMode="tail">{fmtCategory(item.category)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.historyActions}>
+                      <Text style={[styles.historyAmount, { color: item.type === 'expense' ? '#EF4444' : '#10B981' }]}>R$ {Math.abs(item.amount).toFixed(2)}</Text>
+                      <TouchableOpacity onPress={() => openEdit(item)}>
+                        <Ionicons name="create-outline" size={20} color={colors.light.subtext} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmDelete(item)}>
+                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </LinearGradient>
                 </View>
-                <View style={styles.historyActions}>
-                  <Text style={[styles.historyAmount, { color: item.type === 'expense' ? '#EF4444' : '#10B981' }]}>R$ {Math.abs(item.amount).toFixed(2)}</Text>
-                  <TouchableOpacity onPress={() => openEdit(item)}>
-                    <Ionicons name="create-outline" size={20} color={colors.light.subtext} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => confirmDelete(item)}>
-                    <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+              );
+            }}
           />
         </View>
 
@@ -286,9 +315,12 @@ export default function TransactionsScreen() {
                     />
                   ) : (
                     <TouchableOpacity style={styles.titleLabelRow} onPress={() => setEditingTitle(true)}>
-                      <Text style={styles.titleLabel}>{form.description || 'Toque para definir o título'}</Text>
+                      <Text style={styles.titleLabel}>{form.description || 'Adicionar título'}</Text>
                       <Ionicons name="create-outline" size={18} color={colors.light.subtext} />
                     </TouchableOpacity>
+                  )}
+                  {!form.description && (
+                    <Text style={styles.titleHelper}>Toque acima para preencher o título</Text>
                   )}
                 </View>
 
@@ -296,15 +328,15 @@ export default function TransactionsScreen() {
                 <View style={styles.typeRow}>
                   <TouchableOpacity
                     onPress={() => setForm({ ...form, type: 'income' })}
-                    style={[styles.typeChoice, styles.typeIncomeBtn, form.type === 'income' && styles.typeActive]}
+                    style={[styles.typeChoice, form.type === 'income' ? styles.typeIncomeActive : styles.typeNeutral]}
                   >
-                    <Text style={[styles.typeChoiceText, form.type === 'income' && styles.typeChoiceTextActive]}>Receita</Text>
+                    <Text style={styles.typeChoiceText}>Receita</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setForm({ ...form, type: 'expense' })}
-                    style={[styles.typeChoice, styles.typeExpenseBtn, form.type === 'expense' && styles.typeActive]}
+                    style={[styles.typeChoice, form.type === 'expense' ? styles.typeExpenseActive : styles.typeNeutral]}
                   >
-                    <Text style={[styles.typeChoiceText, form.type === 'expense' && styles.typeChoiceTextActive]}>Despesa</Text>
+                    <Text style={styles.typeChoiceText}>Despesa</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -328,8 +360,17 @@ export default function TransactionsScreen() {
                     return (
                       <TouchableOpacity
                         key={String(key)}
-                        style={[styles.catChip, isActive && styles.catChipActive]}
+                        style={[
+                          styles.catChip,
+                          { width: '48%' },
+                          isActive && { borderColor: color, backgroundColor: pastel(color, 0.2) },
+                        ]}
                         onPress={() => setForm({ ...form, category: String(key) })}
+                        onLongPress={() => {
+                          setCatEditing(c);
+                          setNewCat({ name: c.name, icon: String(c.icon || 'pricetag-outline'), color: String(c.color || colors.primary) });
+                          setCatModalVisible(true);
+                        }}
                       >
                         <View style={[styles.catIconWrap, { backgroundColor: `${color}22` }]}> 
                           <Ionicons name={(c.icon as any) || 'pricetag-outline'} size={16} color={color} />
@@ -362,7 +403,7 @@ export default function TransactionsScreen() {
         <Modal visible={catModalVisible} animationType="slide" transparent onRequestClose={() => setCatModalVisible(false)}>
           <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
             <View style={{ backgroundColor: colors.light.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
-              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>Nova Categoria</Text>
+              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>{catEditing ? 'Editar Categoria' : 'Nova Categoria'}</Text>
               <View style={{ gap: spacing.sm }}>
                 <TextInput placeholder="Nome" value={newCat.name} onChangeText={(t) => setNewCat({ ...newCat, name: t })} style={styles.input} placeholderTextColor={colors.light.subtext} />
                 <Text style={styles.sectionLabel}>Ícone</Text>
@@ -380,12 +421,64 @@ export default function TransactionsScreen() {
                   ))}
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setCatModalVisible(false)}>
+                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => { setCatModalVisible(false); setCatEditing(null); }}>
                     <Text style={styles.cancelText}>Cancelar</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={saveCategory}>
-                    <Text style={styles.saveText}>Salvar</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    {catEditing && (
+                      <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={async () => {
+                        try {
+                          if (catEditing?.id) {
+                            await categoryService.deleteCategory(catEditing.id);
+                          }
+                          const cats: Category[] = await categoryService.getCategories();
+                          setCategories(cats);
+                          const map: Record<string, string> = {};
+                          cats.forEach((c) => {
+                            if (c.id) map[c.id] = c.name;
+                            if (c.category_key) map[c.category_key as string] = c.name;
+                            map[c.name] = c.name;
+                          });
+                          setCategoryMap(map);
+                          setCatModalVisible(false);
+                          setCatEditing(null);
+                        } catch (e) {
+                          Alert.alert('Erro', (e as Error).message);
+                        }
+                      }}>
+                        <Text style={styles.cancelText}>Excluir</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={async () => {
+                      try {
+                        if (!newCat.name.trim()) {
+                          Alert.alert('Validação', 'Informe um nome para a categoria');
+                          return;
+                        }
+                        if (catEditing?.id) {
+                          await categoryService.updateCategory(catEditing.id, { name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
+                        } else {
+                          await categoryService.addCategory({ name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
+                        }
+                        const cats: Category[] = await categoryService.getCategories();
+                        setCategories(cats);
+                        const map: Record<string, string> = {};
+                        cats.forEach((c) => {
+                          if (c.id) map[c.id] = c.name;
+                          if (c.category_key) map[c.category_key as string] = c.name;
+                          map[c.name] = c.name;
+                        });
+                        setCategoryMap(map);
+                        setCatModalVisible(false);
+                        setCatEditing(null);
+                        setNewCat({ name: '', icon: 'pricetag-outline', color: '#64748B' });
+                      } catch (e) {
+                        Alert.alert('Erro', (e as Error).message);
+                      }
+                    }}>
+                      <Text style={styles.saveText}>Salvar</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>
@@ -413,6 +506,8 @@ const styles = StyleSheet.create({
   historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   historyTitle: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
   monthHeader: { color: colors.light.subtext, fontSize: fontSize.sm, marginBottom: spacing.sm, marginTop: spacing.md },
+  historyItemWrap: { backgroundColor: colors.light.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.light.border, overflow: 'hidden' },
+  historyItemInner: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   historyItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.light.card, padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.light.border },
   historyAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.light.border, alignItems: 'center', justifyContent: 'center' },
   historyLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 },
@@ -432,27 +527,27 @@ const styles = StyleSheet.create({
   saveText: { color: '#fff', fontWeight: '700' },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: borderRadius.round },
   addBtnText: { color: '#fff', fontWeight: '700' },
-  // Novo: título como label destacada e editável
   titleLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
   titleLabel: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
+  titleHelper: { color: colors.light.subtext, fontSize: fontSize.sm, marginTop: spacing.xs },
   titleInput: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
-  // Novo: seleção de tipo abaixo do título (verde/receita, vermelho/despesa)
   typeRow: { flexDirection: 'row', gap: spacing.sm },
   typeChoice: { flex: 1, borderWidth: 1, borderRadius: borderRadius.round, paddingVertical: 10, alignItems: 'center' },
+  typeNeutral: { backgroundColor: colors.light.card, borderColor: colors.light.border },
+  typeIncomeActive: { borderColor: '#10B981', backgroundColor: '#E6FFFB' },
+  typeExpenseActive: { borderColor: '#EF4444', backgroundColor: '#FFF5F5' },
   typeIncomeBtn: { borderColor: '#10B981', backgroundColor: '#E6FFFB' },
   typeExpenseBtn: { borderColor: '#EF4444', backgroundColor: '#FFF5F5' },
   typeActive: { borderWidth: 2 },
   typeChoiceText: { color: colors.light.text, fontWeight: '600' },
   typeChoiceTextActive: { color: colors.light.text },
-  // Novo: seleção de categorias com ícones/cores
   sectionLabel: { color: colors.light.subtext, fontWeight: '700', marginTop: spacing.sm },
-  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between' },
   catChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.round, backgroundColor: colors.light.card },
   catChipActive: { borderColor: colors.primary },
   catIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   catName: { color: colors.light.text, fontWeight: '600' },
   catChipAdd: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: borderRadius.round, backgroundColor: colors.light.card },
-  // Novo: opções de ícone e cor na criação de categoria
   iconOption: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, backgroundColor: colors.light.card },
   iconOptionActive: { borderColor: colors.primary },
   colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: colors.light.border },

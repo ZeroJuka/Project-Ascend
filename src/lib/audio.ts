@@ -1,6 +1,7 @@
 import { Audio } from 'expo-av';
 import { WHISPER_KEY, WHISPER_URL } from '@env';
 import { Animated } from 'react-native';
+import logger from '../utils/logger';
 
 const whisperUri = WHISPER_URL;
 const whisperToken = WHISPER_KEY;
@@ -75,7 +76,7 @@ class AudioManager {
       return true;
 
     } catch (error) {
-      console.error('Erro ao configurar áudio:', error);
+      logger.error('Erro ao configurar áudio:', error);
       return false;
     }
   }
@@ -87,7 +88,7 @@ class AudioManager {
       if (!isSetup) return false;
       
       if (this.isListening) {
-        console.warn('Gravação já está em andamento');
+        logger.warn('Gravação já está em andamento');
         return false;
       }
 
@@ -100,7 +101,7 @@ class AudioManager {
       return true;
 
     } catch (error) {
-      console.error('Falha ao iniciar gravação:', error);
+      logger.error('Falha ao iniciar gravação:', error);
       return false;
     }
   }
@@ -121,7 +122,7 @@ class AudioManager {
       return { uri: uri || undefined, success: true, transcription: await this.transcribeAudio(uri || '') };
 
     } catch (error) {
-      console.error('Falha ao parar gravação:', error);
+      logger.error('Falha ao parar gravação:', error);
       return { success: false, error: String(error) };
     }
   }
@@ -140,7 +141,7 @@ class AudioManager {
       this.isListening = false;
       return true;
     } catch (error) {
-      console.error('Falha ao cancelar gravação:', error);
+      logger.error('Falha ao cancelar gravação:', error);
       return false;
     }
   }
@@ -156,7 +157,7 @@ class AudioManager {
       });
       return true;
     } catch (error) {
-      console.warn('Sem conectividade de rede detectada');
+      logger.warn('Sem conectividade de rede detectada');
       return false;
     }
   }
@@ -174,11 +175,11 @@ class AudioManager {
         return await fn();
       } catch (error) {
         lastError = error as Error;
-        console.warn(`Tentativa ${attempt + 1}/${maxRetries} falhou:`, error);
+        logger.warn(`Tentativa ${attempt + 1}/${maxRetries} falhou:`, error);
         
         if (attempt < maxRetries - 1) {
           const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
-          console.info(`Aguardando ${delay}ms antes da próxima tentativa...`);
+          logger.info(`Aguardando ${delay}ms antes da próxima tentativa...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -189,22 +190,16 @@ class AudioManager {
 
   async transcribeAudio(uri: string): Promise<string> {
     try {
-      console.warn(`
-        ==================================================
-        Whisper Key Used: ${whisperToken ? 'Configurado' : 'NÃO CONFIGURADO'}
-        URI Fetched: ${whisperUri || 'NÃO CONFIGURADO'}
-        ==================================================
-      `);
-      console.info('Starting transcription...');
+      if (__DEV__) logger.info('Iniciando transcrição (Whisper configurado?)');
 
       // Validações iniciais
       if (!uri) {
-        console.error('URI de áudio inválido');
+        logger.error('URI de áudio inválido');
         return 'Erro: URI de áudio inválido';
       }
 
       if (!whisperToken || !whisperUri) {
-        console.error('Configurações do Whisper não encontradas');
+        logger.error('Configurações do Whisper não encontradas');
         return 'Erro: Configurações de transcrição não encontradas. Verifique as variáveis de ambiente.';
       }
 
@@ -219,7 +214,7 @@ class AudioManager {
       const supportedFormats = ['m4a', 'wav', 'mp3', 'ogg', 'flac', 'webm'];
       
       if (!fileExtension || !supportedFormats.includes(fileExtension)) {
-        console.error(`Formato de arquivo não suportado: ${fileExtension}`);
+        logger.error(`Formato de arquivo não suportado: ${fileExtension}`);
         return 'Erro: Formato de áudio não suportado';
       }
 
@@ -273,7 +268,7 @@ class AudioManager {
           }
           
           const data = await apiResponse.json();
-          console.info('Transcription data:', JSON.stringify(data));
+          logger.info('Transcription data:', JSON.stringify(data));
 
           if (data.text) {
             return data.text;
@@ -298,7 +293,7 @@ class AudioManager {
       return result;
       
     } catch (error) {
-      console.error('Erro ao transcrever áudio:', error);
+      logger.error('Erro ao transcrever áudio:', error);
       
       // Mensagens de erro mais específicas
       if ((error as Error).message.includes('Network request failed')) {

@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, View, Image, SafeAreaView, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Image, SafeAreaView, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, fontSize, gradients } from '../utils/theme';
 import Auth from '../components/Auth';
+import { commonStyles } from '../utils/Styles';
 
 export default function LoginScreen() {
   const handleAuthSuccess = () => {
@@ -12,15 +13,17 @@ export default function LoginScreen() {
   return (
     <LinearGradient colors={[gradients.brand.from, gradients.brand.to]} style={styles.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <SafeAreaView style={styles.container}>
-        <View style={styles.logoContainer}>
-          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.appName}>Ascend</Text>
-          <Text style={styles.tagline}>Controle financeiro moderno e simples</Text>
-        </View>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.md }} showsVerticalScrollIndicator={false}>
+          <View style={commonStyles.logoContainer}>
+            <Image source={require('../../assets/icon.png')} style={commonStyles.logo} resizeMode="contain" />
+            <Text style={commonStyles.appName}>Ascend</Text>
+            <Text style={commonStyles.tagline}>Controle financeiro moderno e simples</Text>
+          </View>
 
-        <View style={styles.authCard}>
-          <Auth onAuthSuccess={handleAuthSuccess} initialMode="login" />
-        </View>
+          <View style={styles.authCard}>
+            <Auth onAuthSuccess={handleAuthSuccess} initialMode="login" />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -29,9 +32,5 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   container: { flex: 1, justifyContent: 'center' },
-  logoContainer: { alignItems: 'center', marginBottom: spacing.md },
-  logo: { width: 90, height: 90, borderRadius: borderRadius.round },
-  appName: { fontSize: fontSize.xxxl, fontWeight: '800', color: '#fff', marginTop: spacing.xs },
-  tagline: { fontSize: fontSize.sm, color: '#fff', opacity: 0.8 },
   authCard: { marginHorizontal: spacing.md, backgroundColor: colors.light.card, borderRadius: borderRadius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.light.border },
 });

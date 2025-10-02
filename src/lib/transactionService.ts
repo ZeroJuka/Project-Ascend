@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Transaction, TransactionFormData } from '../types/transaction';
+import logger from '../utils/logger';
 
 export const transactionService = {
   async getTransactions(): Promise<Transaction[]> {
@@ -9,7 +10,7 @@ export const transactionService = {
       .order('date', { ascending: false });
 
     if (error) {
-      console.error('Erro ao buscar transações:', error);
+      logger.error('Erro ao buscar transações:', error);
       throw error;
     }
 
@@ -25,7 +26,7 @@ export const transactionService = {
     //           +'\n=================================================')
 
     if (userError || !userData.user) {
-      console.error('Erro ao obter usuário atual:', userError);
+      logger.error('Erro ao obter usuário atual:', userError);
       throw new Error('Usuário não autenticado');
     }
     
@@ -47,7 +48,7 @@ export const transactionService = {
       .single();
 
     if (error) {
-      console.error('Erro ao adicionar transação:', error);
+      logger.error('Erro ao adicionar transação:', error);
       throw error;
     }
 
@@ -63,7 +64,7 @@ export const transactionService = {
       .single();
 
     if (error) {
-      console.error('Erro ao atualizar transação:', error);
+      logger.error('Erro ao atualizar transação:', error);
       throw error;
     }
 
@@ -77,7 +78,7 @@ export const transactionService = {
       .eq('id', id);
 
     if (error) {
-      console.error('Erro ao excluir transação:', error);
+      logger.error('Erro ao excluir transação:', error);
       throw error;
     }
   },
