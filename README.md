@@ -217,3 +217,24 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
   <p>Feito com ❤️ para revolucionar sua gestão financeira</p>
   <p>⭐ Se este projeto te ajudou, considere dar uma estrela!</p>
 </div>
+## Design System & Responsive Utilities
+
+This project uses a centralized theme and responsive helpers to keep visuals consistent across screens.
+
+- Colors: `colors.light.text`, `colors.light.subtext`, `colors.dark.card`, `colors.dark.background`, `colors.dark.border`, `colors.primary`.
+- Spacing: `spacing.xs`, `spacing.sm`, `spacing.md`, `spacing.lg`, `spacing.xl` for paddings/margins.
+- Radius: `borderRadius.sm`, `borderRadius.md`, `borderRadius.lg`, `borderRadius.round` for surfaces and avatars.
+- Typography: `fontSize.sm`, `fontSize.md`, `fontSize.lg`, `fontSize.xxl`, `fontSize.xxxl` for scalable text.
+- Charts: `chartTheme.config` in `src/utils/theme.ts` centralizes `react-native-chart-kit` styles.
+
+Responsive helpers (in `src/hooks/useResponsive.ts`):
+- `breakpoint`, `isSmall`, `isMedium`, `isLarge` based on width.
+- `containerPadding(breakpoint)`: standard page padding by size.
+- `maxContentWidth(breakpoint)`: recommended content width cap.
+- `columns(breakpoint)`: grid column suggestions for layout decisions.
+
+Usage examples:
+- Import tokens where needed: `import { colors, spacing, borderRadius, fontSize } from '../utils/theme';`
+- Apply to styles: use `spacing.md` for gaps, `borderRadius.lg` for cards, `colors.dark.card` for dark surfaces, `colors.light.text` for text.
+
+Keep new screens aligned by sourcing from the theme and helpers and avoid hardcoded values unless necessary.

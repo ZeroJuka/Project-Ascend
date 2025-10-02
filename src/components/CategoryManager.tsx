@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { categoryService } from '../lib/categoryService';
 import { Category, CategoryFormData } from '../types/category';
 import { commonStyles } from '../utils/Styles';
-import { theme } from '../utils/theme';
+import { theme, colors } from '../utils/theme';
 
 // Cores disponíveis para seleção
 const AVAILABLE_COLORS = [
@@ -212,7 +212,7 @@ export default function CategoryManager({
           </View>
 
           {loading ? (
-            <ActivityIndicator size="large" color="#4ADE80" />
+          <ActivityIndicator size="large" color={colors.primary} />
           ) : (
             <>
               {!showAddForm ? (

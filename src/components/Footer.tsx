@@ -5,6 +5,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { audioManager } from '../lib/audio';
+import { colors, spacing, borderRadius, gradients, elevation } from '../utils/theme';
+import { useResponsive } from '../hooks/useResponsive';
 
 type FooterProps = {
   activeScreen?: keyof RootStackParamList;
@@ -13,6 +15,7 @@ type FooterProps = {
 const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
+  const { isSmall } = useResponsive();
   
   const currentScreen = activeScreen || (route.name as keyof RootStackParamList);
 
@@ -87,9 +90,9 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         <Ionicons 
           name="home-outline" 
           size={24} 
-          color={isActive('Home') ? "#4ADE80" : "#9CA3AF"} 
+          color={isActive('Home') ? colors.primary : colors.light.subtext} 
         />
-        <Text style={[styles.navText, isActive('Home') && styles.activeNavText]}>Home</Text>
+        {!isSmall && (<Text style={[styles.navText, isActive('Home') && styles.activeNavText]}>Home</Text>)}
       </TouchableOpacity>
       
       <TouchableOpacity 
@@ -99,9 +102,9 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         <Ionicons 
           name="wallet-outline" 
           size={24} 
-          color={isActive('Transactions') ? "#4ADE80" : "#9CA3AF"} 
+          color={isActive('Transactions') ? colors.primary : colors.light.subtext} 
         />
-        <Text style={[styles.navText, isActive('Transactions') && styles.activeNavText]}>Transações</Text>
+        {!isSmall && (<Text style={[styles.navText, isActive('Transactions') && styles.activeNavText]}>Transações</Text>)}
       </TouchableOpacity>
       
       {/* Botão central para IA */}
@@ -123,7 +126,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
           style={({ pressed }) => [
             styles.centerButton,
             {
-              backgroundColor: isListening ? '#F87171' : '#4ADE80',
+              backgroundColor: isListening ? '#F87171' : colors.primary,
               transform: [
                 { scale: pressed ? 0.95 : 1 }
               ]
@@ -151,9 +154,9 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         <Ionicons 
           name="pie-chart-outline" 
           size={24} 
-          color={isActive('Analytics') ? "#4ADE80" : "#9CA3AF"} 
+          color={isActive('Analytics') ? colors.primary : colors.light.subtext} 
         />
-        <Text style={[styles.navText, isActive('Analytics') && styles.activeNavText]}>Análises</Text>
+        {!isSmall && (<Text style={[styles.navText, isActive('Analytics') && styles.activeNavText]}>Análises</Text>)}
       </TouchableOpacity>
       
       <TouchableOpacity 
@@ -163,9 +166,9 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
         <Ionicons 
           name="flag-outline"
           size={24} 
-          color={isActive('Goals') ? "#4ADE80" : "#9CA3AF"} 
+          color={isActive('Goals') ? colors.primary : colors.light.subtext} 
         />
-        <Text style={[styles.navText, isActive('Goals') && styles.activeNavText]}>Metas</Text>
+        {!isSmall && (<Text style={[styles.navText, isActive('Goals') && styles.activeNavText]}>Metas</Text>)}
       </TouchableOpacity>
     </View>
   );
@@ -176,33 +179,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#1F2937',
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.light.card,
+    borderWidth: 1,
+    borderColor: colors.light.border,
+    borderRadius: 28,
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 24,
+    left: 16,
+    right: 16,
+    ...elevation.md,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.xs,
   },
   navText: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: colors.light.subtext,
     marginTop: 2,
   },
   activeNavText: {
-    color: '#4ADE80',
+    color: colors.primary,
     fontWeight: '500',
   },
   centerButtonContainer: {
     position: 'relative',
-    bottom: 20,
+    bottom: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -213,22 +218,22 @@ const styles = StyleSheet.create({
   },
   centerButtonGlow: {
     position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#4ADE80',
+    width: 76,
+    height: 76,
+    borderRadius: borderRadius.round,
+    backgroundColor: colors.primary,
     opacity: 0.3,
   },
   centerButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#4ADE80',
+    width: 64,
+    height: 64,
+    borderRadius: borderRadius.round,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
   },

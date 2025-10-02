@@ -1,19 +1,19 @@
-import StyleSheet from 'react-native';
+import { StyleSheet } from 'react-native';
 import { colors } from './theme';
 
-export const headerStyles = StyleSheet.StyleSheet.create({
+export const headerStyles = StyleSheet.create({
   headerContainer: {
     width: '100%',
-    backgroundColor: 'rgba(31, 41, 55, 0.95)',
+    backgroundColor: colors.dark.card,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: colors.dark.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
   headerContent: {
     flexDirection: 'row',
@@ -25,30 +25,30 @@ export const headerStyles = StyleSheet.StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#4ADE80',
+    borderColor: colors.primary,
   },
   logoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.dark.text,
     marginLeft: 8,
   },
   profileButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#4ADE80',
+    backgroundColor: '#293249',
     justifyContent: 'center',
     alignItems: 'center',
     // Estados interativos serão gerenciados via activeOpacity no TouchableOpacity
   },
 });
 
-export const commonStyles = StyleSheet.StyleSheet.create({
+export const commonStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1F2937',
@@ -154,7 +154,6 @@ export const commonStyles = StyleSheet.StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -330,8 +329,8 @@ export const commonStyles = StyleSheet.StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: '#4ADE80',
-    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
     padding: 10,
   },
   appName: {

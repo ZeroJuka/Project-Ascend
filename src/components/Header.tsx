@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { headerStyles } from '../utils/Styles';
+import { useResponsive } from '../hooks/useResponsive';
+import { colors } from '../utils/theme';
 
 type HeaderProps = {
   title?: string;
@@ -17,6 +19,7 @@ const Header: React.FC<HeaderProps> = ({
   onProfilePress 
 }) => {
   const navigation = useNavigation();
+  const { isSmall } = useResponsive();
 
   return (
     <SafeAreaView 
@@ -34,10 +37,10 @@ const Header: React.FC<HeaderProps> = ({
         <View style={headerStyles.logoContainer}>
           <Image 
             source={require('../../assets/icon.png')} 
-            style={headerStyles.logoImage} 
+            style={[headerStyles.logoImage, { tintColor: undefined }]} 
             resizeMode="contain"
           />
-          <Text style={headerStyles.logoText}>{title}</Text>
+          {!isSmall && <Text style={[headerStyles.logoText, { color: colors.light.text }]}>{title}</Text>}
         </View>
         
         {showProfileButton && (
@@ -46,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({
             onPress={onProfilePress}
             activeOpacity={0.7} // Estado interativo ao pressionar
           >
-            <Ionicons name="person" size={24} color="#fff" />
+            <Ionicons name="person" size={24} color={colors.light.text} />
           </TouchableOpacity>
         )}
       </View>

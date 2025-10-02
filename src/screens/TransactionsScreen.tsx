@@ -1,903 +1,460 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, Dimensions, Modal, TextInput, TouchableOpacity, Alert, ScrollView, SectionList } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import PageContainer from '../components/ui/PageContainer';
+import Chip from '../components/ui/Chip';
+import { colors, spacing, borderRadius, fontSize, gradients } from '../utils/theme';
+import { LineChart } from 'react-native-chart-kit';
+import { chartConfig } from '../components/ui/ChartWrapper';
+import { useTransactions } from '../hooks/useTransactions';
 import { transactionService } from '../lib/transactionService';
 import { categoryService } from '../lib/categoryService';
-import { Transaction, TransactionFormData } from '../types/transaction';
-import { Category } from '../types/category';
-import { commonStyles } from '../utils/Styles';
-import Header from '../components/Header';
-import CategoryManager from '../components/CategoryManager';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { LineChart } from 'react-native-chart-kit';
-import Footer from '../components/Footer';
-
-const DEFAULT_CATEGORIES: Partial<Category>[] = [];
+import type { Category } from '../types/category';
+import type { Transaction, TransactionFormData } from '../types/transaction';
 
 export default function TransactionsScreen() {
-  const navigation = useNavigation();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES as Category[]);
-  const [loading, setLoading] = useState(true);
-  const [isChartCollapsed, setIsChartCollapsed] = useState(false);
+  const { transactions, refresh } = useTransactions();
   const [modalVisible, setModalVisible] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<string | null>(null);
-  const [formData, setFormData] = useState<TransactionFormData>({
-    description: '',
-    amount: 0,
-    type: 'expense',
-    category: 'other',
-    date: new Date().toISOString(),
-  });
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [form, setForm] = useState<TransactionFormData>({ description: '', amount: 0, type: 'expense', category: 'Geral', date: new Date().toISOString() });
+  const [accountsOpen, setAccountsOpen] = useState(true);
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [catModalVisible, setCatModalVisible] = useState(false);
+  const [newCat, setNewCat] = useState<{ name: string; icon: string; color: string }>({ name: '', icon: 'pricetag-outline', color: '#64748B' });
+  const iconOptions = [
+    'wallet-outline', 'pricetag-outline', 'fast-food-outline', 'car-outline', 'home-outline', 'game-controller-outline',
+    'medical-outline', 'briefcase-outline', 'airplane-outline', 'school-outline', 'fitness-outline', 'plane-outline',
+    'book-outline', 'paw-outline', 'cafe-outline', 'shirt-outline', 'gift-outline', 'trending-up-outline', 'construct-outline',
+    'brush-outline', 'color-palette-outline'
+  ];
+  const colorOptions = ['#10B981', '#EF4444', '#3B82F6', '#F59E0B', '#8B5CF6', '#14B8A6', '#64748B'];
+  const width = Dimensions.get('window').width - 32;
+  useEffect(() => { refresh(); }, []);
 
   useEffect(() => {
-    loadTransactions();
-    loadCategories();
+    (async () => {
+      try {
+        const cats: Category[] = await categoryService.getCategories();
+        const map: Record<string, string> = {};
+        cats.forEach((c) => {
+          if (c.id) map[c.id] = c.name;
+          if (c.category_key) map[c.category_key as string] = c.name;
+          map[c.name] = c.name;
+        });
+        setCategoryMap(map);
+        setCategories(cats);
+      } catch (e) {
+        console.warn('Falha ao carregar categorias', e);
+      }
+    })();
   }, []);
 
-  // Infos da Home (saldo, receitas, gastos) com base nas transações do Supabase
-  const incomeTotal = useMemo(
-    () => transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
+  const currency = (n: number) => `R$ ${(n || 0).toLocaleString('pt-BR')}`;
+  const totalIncome = transactions.reduce((sum, t) => sum + (t.type === 'income' ? Math.abs(t.amount) : 0), 0);
+  const totalExpense = transactions.reduce((sum, t) => sum + (t.type === 'expense' ? Math.abs(t.amount) : 0), 0);
+  const currentMonthLabel = new Date().toLocaleString('pt-BR', { month: 'short' });
+
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - (5 - i));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const labels = months.map((d) => d.toLocaleString('pt-BR', { month: 'short' }));
+  const incomeSeries = months.map((m) =>
+    transactions.reduce((sum, t) => {
+      const dt = new Date(t.date);
+      const sameMonth = dt.getMonth() === m.getMonth() && dt.getFullYear() === m.getFullYear();
+      return sum + (sameMonth && t.type === 'income' ? Math.abs(t.amount) : 0);
+    }, 0)
   );
-  const expenseTotal = useMemo(
-    () => transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
+  const expenseSeries = months.map((m) =>
+    transactions.reduce((sum, t) => {
+      const dt = new Date(t.date);
+      const sameMonth = dt.getMonth() === m.getMonth() && dt.getFullYear() === m.getFullYear();
+      return sum + (sameMonth && t.type === 'expense' ? Math.abs(t.amount) : 0);
+    }, 0)
   );
-  const balanceTotal = useMemo(() => incomeTotal - expenseTotal, [incomeTotal, expenseTotal]);
 
-  // Série do fluxo de caixa (últimos 6 meses) com dados do Supabase
-  const monthLabelsPt = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const cashFlowData = useMemo(() => {
-    const now = new Date();
-    const months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - (5 - i));
-      return { year: d.getFullYear(), month: d.getMonth() };
-    });
-
-    const incomeByMonth = months.map(({ year, month }) =>
-      transactions
-        .filter(t => t.type === 'income')
-        .filter(t => {
-          const dt = new Date(t.date);
-          return dt.getFullYear() === year && dt.getMonth() === month;
-        })
-        .reduce((sum, t) => sum + t.amount, 0)
-    );
-    const expenseByMonth = months.map(({ year, month }) =>
-      transactions
-        .filter(t => t.type === 'expense')
-        .filter(t => {
-          const dt = new Date(t.date);
-          return dt.getFullYear() === year && dt.getMonth() === month;
-        })
-        .reduce((sum, t) => sum + t.amount, 0)
-    );
-
-    return {
-      labels: months.map(m => monthLabelsPt[m.month]),
-      datasets: [
-        {
-          data: incomeByMonth,
-          color: (opacity = 1) => `rgba(74, 222, 128, ${opacity})`,
-          strokeWidth: 2,
-        },
-        {
-          data: expenseByMonth,
-          color: (opacity = 1) => `rgba(248, 113, 113, ${opacity})`,
-          strokeWidth: 2,
-        },
-      ],
-      legend: ['Receitas', 'Despesas'],
-    };
-  }, [transactions]);
-
-  const loadTransactions = async () => {
-    try {
-      setLoading(true);
-      const data = await transactionService.getTransactions();
-      setTransactions(data);
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível carregar as transações');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const customCategories = await categoryService.getCategories();
-      if (customCategories && customCategories.length > 0) {
-        setCategories([...DEFAULT_CATEGORIES as Category[], ...customCategories].sort());
-      }
-    } catch (error) {
-      console.error('Erro ao carregar categorias personalizadas:', error);
-      setCategories(DEFAULT_CATEGORIES as Category[]);
-    }
-  };
-
-  const handleAddTransaction = () => {
-    setEditingTransaction(null);
-    setFormData({
-      description: '',
-      amount: 0,
-      type: 'expense',
-      category: 'other',
-      date: new Date().toISOString(),
-    });
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ description: '', amount: 0, type: 'expense', category: 'Geral', date: new Date().toISOString() });
     setModalVisible(true);
   };
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction.id);
-    setFormData({
-      description: transaction.description,
-      amount: transaction.amount,
-      type: transaction.type,
-      category: transaction.category,
-      date: transaction.date,
-    });
+  const openEdit = (t: Transaction) => {
+    setEditing(t);
+    setForm({ description: t.description, amount: t.amount, type: t.type, category: t.category, date: t.date });
     setModalVisible(true);
   };
 
-  const handleDeleteTransaction = async (id: string) => {
-    Alert.alert(
-      'Confirmar exclusão',
-      'Tem certeza que deseja excluir esta transação?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await transactionService.deleteTransaction(id);
-              setTransactions(transactions.filter((t) => t.id !== id));
-            } catch (error) {
-              Alert.alert('Erro', 'Não foi possível excluir a transação');
-              console.error(error);
-            }
-          },
-        },
-      ]
-    );
+  const validate = (): string | null => {
+    if (!form.description.trim()) return 'Descrição é obrigatória';
+    if (!form.category.trim()) return 'Categoria é obrigatória';
+    if (!['income','expense'].includes(form.type)) return 'Tipo inválido';
+    if (isNaN(form.amount) || form.amount === 0) return 'Valor deve ser diferente de zero';
+    return null;
   };
 
-  const handleSaveTransaction = async () => {
+  const save = async () => {
+    const err = validate();
+    if (err) {
+      Alert.alert('Validação', err);
+      return;
+    }
     try {
-      if (!formData.description.trim()) {
-        Alert.alert('Erro', 'A descrição é obrigatória');
-        return;
-      }
-
-      if (formData.amount <= 0) {
-        Alert.alert('Erro', 'O valor deve ser maior que zero');
-        return;
-      }
-
-      if (editingTransaction) {
-        const updatedTransaction = await transactionService.updateTransaction(
-          editingTransaction,
-          formData
-        );
-        setTransactions(
-          transactions.map((t) => (t.id === editingTransaction ? updatedTransaction : t))
-        );
+      if (editing) {
+        await transactionService.updateTransaction(editing.id, form);
       } else {
-        const newTransaction = await transactionService.addTransaction(formData);
-        setTransactions([newTransaction, ...transactions]);
+        await transactionService.addTransaction(form);
       }
-
       setModalVisible(false);
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível salvar a transação');
-      console.error(error);
+      await refresh();
+    } catch (e) {
+      Alert.alert('Erro', (e as Error).message);
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  const confirmDelete = (t: Transaction) => {
+    Alert.alert('Excluir transação', 'Tem certeza que deseja excluir?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => {
+        try { await transactionService.deleteTransaction(t.id); await refresh(); } catch (e) { Alert.alert('Erro', (e as Error).message); }
+      }}
+    ]);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR');
-  };
+  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const monthTitle = (d: Date) => d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+  const sections = (() => {
+    const groups: Record<string, Transaction[]> = {};
+    transactions.forEach((t) => {
+      const d = new Date(t.date);
+      const key = monthKey(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+    return Object.entries(groups)
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([key, data]) => {
+        const [year, month] = key.split('-');
+        const d = new Date(Number(year), Number(month) - 1, 1);
+        return { title: monthTitle(d), data };
+      });
+  })();
 
-  const getCategoryInfo = (categoryIdOrKey: string) => {
-    // Procurar primeiro pelo id e depois pelo category_key
-    const category = categories.find(c => c.id === categoryIdOrKey || c.category_key === categoryIdOrKey);
-    
-    if (category) {
-      return {
-        name: category.name,
-        icon: category.icon,
-        color: category.color,
-      };
-    }
-    
-    // Categoria padrão caso não encontre
-    return {
-      name: 'Outros',
-      icon: 'ellipsis-horizontal-outline',
-      color: '#6B7280',
-    };
-  };
-  
-  const handleCategorySelected = (category: Category) => {
-    // Usar category_key para categorias padrão, caso contrário usar id
-    const categoryIdentifier = category.category_key || category.id;
-    setFormData({ ...formData, category: categoryIdentifier });
-  };
+  const fmtCategory = (raw: string) => categoryMap[raw] ?? raw;
 
-  const renderTransactionItem = ({ item }: { item: Transaction }) => {
-    const categoryInfo = getCategoryInfo(item.category);
-
-    return (
-      <View style={styles.transactionItem}>
-        <View style={[styles.categoryIcon, { backgroundColor: categoryInfo.color }]}>
-          <Ionicons name={categoryInfo.icon as any} size={20} color="#fff" />
-        </View>
-        
-        <View style={styles.transactionDetails}>
-          <Text style={styles.transactionDescription}>{item.description}</Text>
-          <Text style={styles.transactionCategory}>{categoryInfo.name}</Text>
-          <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
-        </View>
-        
-        <View style={styles.transactionAmount}>
-          <Text 
-            style={[styles.amountText, item.type === 'income' ? styles.incomeText : styles.expenseText]}
-          >
-            {item.type === 'income' ? '+' : '-'} {formatCurrency(item.amount)}
-          </Text>
-          
-          <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={styles.actionButton} 
-              onPress={() => handleEditTransaction(item)}
-            >
-              <Ionicons name="pencil-outline" size={16} color="#4ADE80" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.actionButton} 
-              onPress={() => handleDeleteTransaction(item.id)}
-            >
-              <Ionicons name="trash-outline" size={16} color="#F87171" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setFormData({ ...formData, date: selectedDate.toISOString() });
+  const saveCategory = async () => {
+    try {
+      if (!newCat.name.trim()) {
+        Alert.alert('Validação', 'Informe um nome para a categoria');
+        return;
+      }
+      await categoryService.addCategory({ name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
+      const cats: Category[] = await categoryService.getCategories();
+      setCategories(cats);
+      const map: Record<string, string> = {};
+      cats.forEach((c) => {
+        if (c.id) map[c.id] = c.name;
+        // @ts-ignore
+        if (c.category_key) map[c.category_key as string] = c.name;
+        map[c.name] = c.name;
+      });
+      setCategoryMap(map);
+      setCatModalVisible(false);
+      setNewCat({ name: '', icon: 'pricetag-outline', color: '#64748B' });
+    } catch (e) {
+      Alert.alert('Erro', (e as Error).message);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Header title="Transações" />
-      
-      <View style={styles.content}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4ADE80" />
-            <Text style={styles.loadingText}>Carregando transações...</Text>
+    <PageContainer activeScreen="Transactions">
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <LinearGradient
+          colors={[gradients.info.from, gradients.info.to]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <View style={styles.heroRow}>
+            <Text style={styles.heroTitle}>Minhas Contas</Text>
+            <TouchableOpacity onPress={() => setAccountsOpen(o => !o)}>
+              <Ionicons name={accountsOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#fff" />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            {/* Gráfico de Fluxo de Caixa (dados do Supabase) */}
-            <View style={styles.chartContainer}>
-              <View style={styles.chartHeader}>
-                <Text style={styles.chartTitle}>Fluxo de Caixa</Text>
-                <TouchableOpacity
-                  style={styles.collapseButton}
-                  onPress={() => setIsChartCollapsed(prev => !prev)}
-                >
-                  <Ionicons name={isChartCollapsed ? 'chevron-down-outline' : 'chevron-up-outline'} size={16} color="#fff" />
-                  <Text style={styles.collapseText}>{isChartCollapsed ? 'Expandir' : 'Recolher'}</Text>
-                </TouchableOpacity>
+          {accountsOpen && (
+            <>
+              <View style={styles.cardsRow}>
+                <View style={[styles.accountCard, { backgroundColor: '#E6FFFB' }]}> 
+                  <Text style={[styles.cardAmount, { color: '#10B981' }]}>+ {currency(totalIncome)}</Text>
+                  <Text style={[styles.cardSubtitle, { color: '#1F2937' }]}>Receitas</Text>
+                  <Text style={[styles.cardDate, { color: '#64748B' }]}>{currentMonthLabel}</Text>
+                </View>
+                <View style={[styles.accountCard, { backgroundColor: '#FFF5F5' }]}> 
+                  <Text style={[styles.cardAmount, { color: '#EF4444' }]}>- {currency(totalExpense)}</Text>
+                  <Text style={[styles.cardSubtitle, { color: '#1F2937' }]}>Despesas</Text>
+                  <Text style={[styles.cardDate, { color: '#64748B' }]}>{currentMonthLabel}</Text>
+                </View>
               </View>
-
-              {!isChartCollapsed && (
+              <View style={{ marginTop: spacing.md }}>
                 <LineChart
-                  data={cashFlowData}
-                  width={Dimensions.get('window').width - 32}
-                  height={220}
-                  chartConfig={{
-                    backgroundColor: '#1F2937',
-                    backgroundGradientFrom: '#1F2937',
-                    backgroundGradientTo: '#1F2937',
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    style: {
-                      borderRadius: 16
-                    },
-                    propsForDots: {
-                      r: '6',
-                      strokeWidth: '2',
-                      stroke: '#ffa726'
-                    }
+                  data={{
+                    labels,
+                    datasets: [
+                      { data: incomeSeries, color: () => '#10B981', strokeWidth: 2 },
+                      { data: expenseSeries, color: () => '#EF4444', strokeWidth: 2 },
+                    ],
+                    legend: ['Receitas', 'Despesas'],
                   }}
+                  width={Math.floor(width - spacing.lg * 2)}
+                  height={140}
+                  chartConfig={chartConfig}
                   bezier
-                  style={{
-                    marginVertical: 8,
-                    borderRadius: 16
-                  }}
+                  style={{ borderRadius: borderRadius.lg, overflow: 'hidden' }}
                 />
-              )}
-            </View>
-            
-            {/* Infos da Home: Saldo, Receitas e Gastos */}
-            <View style={styles.balanceCard}>
-              <Text style={styles.balanceLabel}>Saldo Total</Text>
-              <Text style={styles.balanceAmount}>{formatCurrency(balanceTotal)}</Text>
-            </View>
+              </View>
+            </>
+          )}
+          
+        </LinearGradient>
 
-            <View style={styles.summaryContainer}>
-              <View style={[styles.summaryCard, { backgroundColor: 'rgba(74, 222, 128, 0.9)' }]}>
-                <Text style={styles.summaryLabel}>Receitas</Text>
-                <Text style={styles.summaryAmount}>
-                  {formatCurrency(incomeTotal)}
-                </Text>
-              </View>
-              
-              <View style={[styles.summaryCard, { backgroundColor: 'rgba(248, 113, 113, 0.9)' }]}>
-                <Text style={styles.summaryLabel}>Despesas</Text>
-                <Text style={styles.summaryAmount}>
-                  {formatCurrency(expenseTotal)}
-                </Text>
-              </View>
-            </View>
-            
-            <View style={styles.listHeader}>
-              <Text style={styles.listTitle}>Histórico</Text>
-              <TouchableOpacity 
-                style={styles.addButton} 
-                onPress={handleAddTransaction}
-              >
-                <Ionicons name="add" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            
-            {transactions.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="receipt-outline" size={64} color="#6B7280" />
-                <Text style={styles.emptyText}>Nenhuma transação encontrada</Text>
-                <Text style={styles.emptySubtext}>Adicione sua primeira transação clicando no botão +</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={transactions}
-                renderItem={renderTransactionItem}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-              />
+        <View style={styles.historyBlock}>
+          <View style={styles.historyHeader}>
+            <Text style={styles.historyTitle}>Histórico</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+              <Ionicons name="add-outline" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>Nova Transação</Text>
+            </TouchableOpacity>
+          </View>
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+            scrollEnabled={false}
+            renderSectionHeader={({ section }) => (
+              <Text style={styles.monthHeader}>{section.title}</Text>
             )}
-          </>
-        )}
-      </View>
-      
-      {/* Modal para adicionar/editar transação */}
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingTransaction ? 'Editar Transação' : 'Nova Transação'}
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close-outline" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.formContainer}>
-              <View style={styles.typeSelector}>
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    formData.type === 'income' && styles.typeButtonActive,
-                    formData.type === 'income' && { backgroundColor: 'rgba(74, 222, 128, 0.2)' },
-                  ]}
-                  onPress={() => setFormData({ ...formData, type: 'income' })}
-                >
-                  <Ionicons 
-                    name="arrow-up-outline" 
-                    size={20} 
-                    color={formData.type === 'income' ? '#4ADE80' : '#6B7280'} 
-                  />
-                  <Text 
-                    style={[
-                      styles.typeButtonText,
-                      formData.type === 'income' && { color: '#4ADE80' },
-                    ]}
-                  >
-                    Receita
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    formData.type === 'expense' && styles.typeButtonActive,
-                    formData.type === 'expense' && { backgroundColor: 'rgba(248, 113, 113, 0.2)' },
-                  ]}
-                  onPress={() => setFormData({ ...formData, type: 'expense' })}
-                >
-                  <Ionicons 
-                    name="arrow-down-outline" 
-                    size={20} 
-                    color={formData.type === 'expense' ? '#F87171' : '#6B7280'} 
-                  />
-                  <Text 
-                    style={[
-                      styles.typeButtonText,
-                      formData.type === 'expense' && { color: '#F87171' },
-                    ]}
-                  >
-                    Despesa
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Descrição</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Supermercado"
-                  placeholderTextColor="#6B7280"
-                  value={formData.description}
-                  onChangeText={(text) => setFormData({ ...formData, description: text })}
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Valor</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0,00"
-                  placeholderTextColor="#6B7280"
-                  keyboardType="numeric"
-                  value={formData.amount > 0 ? formData.amount.toString() : ''}
-                  onChangeText={(text) => {
-                    const numericValue = parseFloat(text.replace(',', '.')) || 0;
-                    setFormData({ ...formData, amount: numericValue });
-                  }}
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <View style={styles.categoryHeader}>
-                  <Text style={styles.inputLabel}>Categoria</Text>
-                  <TouchableOpacity 
-                    style={styles.manageCategoriesButton}
-                    onPress={() => setShowCategoryManager(true)}
-                  >
-                    <Text style={styles.manageCategoriesText}>Gerenciar</Text>
-                    <Ionicons name="settings-outline" size={16} color="#4ADE80" />
+            renderItem={({ item }) => (
+              <View style={styles.historyItem}>
+                <View style={styles.historyLeft}>
+                  <View style={styles.historyAvatar}>
+                    <Image source={require('../../assets/icon.png')} style={{ width: 20, height: 20 }} />
+                  </View>
+                  <View style={styles.historyTextWrap}>
+                    <Text style={styles.historyTitleText} numberOfLines={1} ellipsizeMode="tail">{item.description}</Text>
+                    <Text style={styles.historySubtitleText} numberOfLines={1} ellipsizeMode="tail">{fmtCategory(item.category)}</Text>
+                  </View>
+                </View>
+                <View style={styles.historyActions}>
+                  <Text style={[styles.historyAmount, { color: item.type === 'expense' ? '#EF4444' : '#10B981' }]}>R$ {Math.abs(item.amount).toFixed(2)}</Text>
+                  <TouchableOpacity onPress={() => openEdit(item)}>
+                    <Ionicons name="create-outline" size={20} color={colors.light.subtext} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => confirmDelete(item)}>
+                    <Ionicons name="trash-outline" size={20} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.categorySelector}>
-                  {categories.map((category) => (
-                    <TouchableOpacity
-                      key={category.id}
-                      style={[
-                        styles.categoryButton,
-                        formData.category === category.id && styles.categoryButtonActive,
-                        formData.category === category.id && { borderColor: category.color },
-                      ]}
-                      onPress={() => setFormData({ ...formData, category: category.id })}
-                    >
-                      <View 
-                        style={[
-                          styles.categoryIconSmall, 
-                          { backgroundColor: category.color },
-                        ]}
+              </View>
+            )}
+          />
+        </View>
+
+        {/* Modal de criação/edição */}
+        <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <View style={{ backgroundColor: colors.light.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
+              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>
+                {editing ? 'Editar Transação' : ''}
+              </Text>
+              <View style={{ gap: spacing.sm }}>
+                {/* Título como label destacada e editável */}
+                <View>
+                  {editingTitle ? (
+                    <TextInput
+                      value={form.description}
+                      onChangeText={(t) => setForm({ ...form, description: t })}
+                      style={styles.titleInput}
+                      placeholder="Defina o título"
+                      placeholderTextColor={colors.light.subtext}
+                      autoFocus
+                      onBlur={() => setEditingTitle(false)}
+                    />
+                  ) : (
+                    <TouchableOpacity style={styles.titleLabelRow} onPress={() => setEditingTitle(true)}>
+                      <Text style={styles.titleLabel}>{form.description || 'Toque para definir o título'}</Text>
+                      <Ionicons name="create-outline" size={18} color={colors.light.subtext} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Seleção de tipo (Receita/Despesa) abaixo do título */}
+                <View style={styles.typeRow}>
+                  <TouchableOpacity
+                    onPress={() => setForm({ ...form, type: 'income' })}
+                    style={[styles.typeChoice, styles.typeIncomeBtn, form.type === 'income' && styles.typeActive]}
+                  >
+                    <Text style={[styles.typeChoiceText, form.type === 'income' && styles.typeChoiceTextActive]}>Receita</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setForm({ ...form, type: 'expense' })}
+                    style={[styles.typeChoice, styles.typeExpenseBtn, form.type === 'expense' && styles.typeActive]}
+                  >
+                    <Text style={[styles.typeChoiceText, form.type === 'expense' && styles.typeChoiceTextActive]}>Despesa</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Valor */}
+                <TextInput
+                  placeholder="Valor"
+                  keyboardType="numeric"
+                  value={String(form.amount || '')}
+                  onChangeText={(t) => setForm({ ...form, amount: Number(t) })}
+                  style={styles.input}
+                  placeholderTextColor={colors.light.subtext}
+                />
+
+                {/* Seleção de Categoria com ícones e cores */}
+                <Text style={styles.sectionLabel}>Categoria</Text>
+                <View style={styles.catGrid}>
+                  {categories.map((c) => {
+                    const key = c.id || (c as any).category_key || c.name;
+                    const isActive = form.category === key;
+                    const color = c.color || colors.primary;
+                    return (
+                      <TouchableOpacity
+                        key={String(key)}
+                        style={[styles.catChip, isActive && styles.catChipActive]}
+                        onPress={() => setForm({ ...form, category: String(key) })}
                       >
-                        <Ionicons name={category.icon as any} size={16} color="#fff" />
-                      </View>
-                      <Text 
-                        style={[
-                          styles.categoryButtonText,
-                          formData.category === category.id && { color: category.color },
-                        ]}
-                      >
-                        {category.name}
-                      </Text>
+                        <View style={[styles.catIconWrap, { backgroundColor: `${color}22` }]}> 
+                          <Ionicons name={(c.icon as any) || 'pricetag-outline'} size={16} color={color} />
+                        </View>
+                        <Text style={styles.catName}>{c.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity style={styles.catChipAdd} onPress={() => setCatModalVisible(true)}>
+                    <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                    <Text style={styles.catName}>Nova categoria</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Ações */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
+                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setModalVisible(false)}>
+                    <Text style={styles.cancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={save}>
+                    <Text style={styles.saveText}>Salvar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal: Nova Categoria */}
+        <Modal visible={catModalVisible} animationType="slide" transparent onRequestClose={() => setCatModalVisible(false)}>
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <View style={{ backgroundColor: colors.light.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
+              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>Nova Categoria</Text>
+              <View style={{ gap: spacing.sm }}>
+                <TextInput placeholder="Nome" value={newCat.name} onChangeText={(t) => setNewCat({ ...newCat, name: t })} style={styles.input} placeholderTextColor={colors.light.subtext} />
+                <Text style={styles.sectionLabel}>Ícone</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                  {iconOptions.map((ico) => (
+                    <TouchableOpacity key={ico} style={[styles.iconOption, newCat.icon === ico && styles.iconOptionActive]} onPress={() => setNewCat({ ...newCat, icon: ico })}>
+                      <Ionicons name={ico as any} size={18} color={colors.light.text} />
                     </TouchableOpacity>
                   ))}
                 </View>
+                <Text style={styles.sectionLabel}>Cor</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                  {colorOptions.map((clr) => (
+                    <TouchableOpacity key={clr} style={[styles.colorDot, { backgroundColor: clr }, newCat.color === clr && styles.colorDotActive]} onPress={() => setNewCat({ ...newCat, color: clr })} />
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
+                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setCatModalVisible(false)}>
+                    <Text style={styles.cancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={saveCategory}>
+                    <Text style={styles.saveText}>Salvar</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Data</Text>
-                <TouchableOpacity 
-                  style={styles.dateSelector}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Text style={styles.dateText}>
-                    {formatDate(formData.date)}
-                  </Text>
-                  <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-                </TouchableOpacity>
-                
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={new Date(formData.date)}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                  />
-                )}
-              </View>
-              
-              <TouchableOpacity 
-                style={styles.saveButton} 
-                onPress={handleSaveTransaction}
-              >
-                <Text style={styles.saveButtonText}>Salvar</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-
-      <CategoryManager
-        visible={showCategoryManager}
-        onClose={() => {
-          setShowCategoryManager(false);
-          loadCategories(); // Recarregar categorias quando o modal for fechado
-        }}
-        onCategorySelected={handleCategorySelected}
-      />
-      
-      {/* Barra de navegação inferior padronizada */}
-      <Footer activeScreen="Transactions" />
-    </SafeAreaView>
+        </Modal>
+      </ScrollView>
+    </PageContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  ...commonStyles,
-  content: {
-    flex: 1,
-    padding: 16,
-    paddingTop: 80,
-    paddingBottom: 70, // Adicionar espaço para a barra de navegação
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#fff',
-  },
-  chartContainer: {
-    marginBottom: 20,
-    backgroundColor: '#1F2937',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  collapseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  collapseText: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 6,
-  },
-  summaryContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  summaryCard: {
-    width: '48%',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    minHeight: 100, // Garantir altura mínima para evitar corte
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#000000',
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  summaryAmount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-  },
-  listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4ADE80',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 32,
-  },
-  transactionItem: {
-    flexDirection: 'row',
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  categoryIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  transactionDetails: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  transactionDescription: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  transactionCategory: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginBottom: 2,
-  },
-  transactionDate: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  transactionAmount: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  amountText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  incomeText: {
-    color: '#4ADE80',
-  },
-  expenseText: {
-    color: '#F87171',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#1F2937',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 30,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  formContainer: {
-    padding: 16,
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  typeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '48%',
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#374151',
-  },
-  typeButtonActive: {
-    borderWidth: 1,
-  },
-  typeButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#fff',
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-  },
-  categorySelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  manageCategoriesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  manageCategoriesText: {
-    color: '#4ADE80',
-    fontSize: 14,
-    marginRight: 4,
-  },
-  categoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginHorizontal: 4,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  categoryButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  categoryIconSmall: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  categoryButtonText: {
-    fontSize: 12,
-    color: '#fff',
-  },
-  dateSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  dateText: {
-    fontSize: 16,
-    color: '#fff',
-  },
-  saveButton: {
-    backgroundColor: '#4ADE80',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
+  content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+  hero: { borderRadius: borderRadius.xl, padding: spacing.lg },
+  heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroTitle: { color: '#fff', fontSize: fontSize.lg, fontWeight: '800' },
+  cardsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  accountCard: { flex: 1, borderRadius: borderRadius.lg, padding: spacing.md },
+  cardAmount: { color: '#1F2937', fontSize: fontSize.lg, fontWeight: '800' },
+  cardSubtitle: { color: '#1F2937', marginTop: 4 },
+  cardDate: { color: '#1F2937', opacity: 0.7, marginTop: 2, fontSize: fontSize.sm },
+  statsBlock: { backgroundColor: colors.light.card, borderRadius: borderRadius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.light.border },
+  statsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  statsTitle: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
+  historyBlock: { backgroundColor: colors.light.card, borderRadius: borderRadius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.light.border },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  historyTitle: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
+  monthHeader: { color: colors.light.subtext, fontSize: fontSize.sm, marginBottom: spacing.sm, marginTop: spacing.md },
+  historyItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.light.card, padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.light.border },
+  historyAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.light.border, alignItems: 'center', justifyContent: 'center' },
+  historyLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 },
+  historyTextWrap: { flex: 1, minWidth: 0 },
+  historyTitleText: { color: colors.light.text, fontWeight: '700' },
+  historySubtitleText: { color: colors.light.subtext, fontSize: fontSize.sm },
+  historyActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  historyAmount: { fontSize: fontSize.md, fontWeight: '700' },
+  input: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.light.text },
+  typeBtn: { flex: 1, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.round, paddingVertical: 10, alignItems: 'center', backgroundColor: colors.light.card },
+  typeBtnActive: { borderColor: colors.primary },
+  typeBtnText: { color: colors.light.text, fontWeight: '600' },
+  modalBtn: { paddingVertical: 12, paddingHorizontal: spacing.lg, borderRadius: borderRadius.lg },
+  cancelBtn: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border },
+  saveBtn: { backgroundColor: colors.primary },
+  cancelText: { color: colors.light.text, fontWeight: '600' },
+  saveText: { color: '#fff', fontWeight: '700' },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: borderRadius.round },
+  addBtnText: { color: '#fff', fontWeight: '700' },
+  // Novo: título como label destacada e editável
+  titleLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
+  titleLabel: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
+  titleInput: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
+  // Novo: seleção de tipo abaixo do título (verde/receita, vermelho/despesa)
+  typeRow: { flexDirection: 'row', gap: spacing.sm },
+  typeChoice: { flex: 1, borderWidth: 1, borderRadius: borderRadius.round, paddingVertical: 10, alignItems: 'center' },
+  typeIncomeBtn: { borderColor: '#10B981', backgroundColor: '#E6FFFB' },
+  typeExpenseBtn: { borderColor: '#EF4444', backgroundColor: '#FFF5F5' },
+  typeActive: { borderWidth: 2 },
+  typeChoiceText: { color: colors.light.text, fontWeight: '600' },
+  typeChoiceTextActive: { color: colors.light.text },
+  // Novo: seleção de categorias com ícones/cores
+  sectionLabel: { color: colors.light.subtext, fontWeight: '700', marginTop: spacing.sm },
+  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  catChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.round, backgroundColor: colors.light.card },
+  catChipActive: { borderColor: colors.primary },
+  catIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  catName: { color: colors.light.text, fontWeight: '600' },
+  catChipAdd: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: borderRadius.round, backgroundColor: colors.light.card },
+  // Novo: opções de ícone e cor na criação de categoria
+  iconOption: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, backgroundColor: colors.light.card },
+  iconOptionActive: { borderColor: colors.primary },
+  colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: colors.light.border },
+  colorDotActive: { borderColor: colors.primary },
 });

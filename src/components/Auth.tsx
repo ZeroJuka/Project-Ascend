@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { colors } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
@@ -221,7 +222,7 @@ export default function Auth({ onAuthSuccess, initialMode = 'login' }: AuthProps
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={isFormValid && !loading ? ['#10B981', '#059669', '#047857'] : ['#6B7280', '#4B5563']}
+              colors={isFormValid && !loading ? [colors.primary, '#D97706', '#B45309'] : ['#6B7280', '#4B5563']}
               style={styles.submitButtonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
     shadowRadius: 25,
     elevation: 15,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(245, 158, 11, 0.2)',
   },
   header: {
     alignItems: 'center',
@@ -310,7 +311,7 @@ const styles = StyleSheet.create({
   titleUnderline: {
     width: 60,
     height: 3,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.primary,
     borderRadius: 2,
   },
   subtitle: {
@@ -359,7 +360,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#10B981',
+    shadowColor: colors.primary,
     shadowOffset: {
       width: 0,
       height: 4,
@@ -424,7 +425,7 @@ const styles = StyleSheet.create({
   toggleButton: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#10B981',
+    color: colors.primary,
     marginRight: 4,
   },
   toggleIcon: {
