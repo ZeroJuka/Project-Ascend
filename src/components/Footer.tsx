@@ -137,7 +137,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
             <Ionicons name="mic" size={30} color="#ffffff" />
           ) : (
             <Image 
-              source={require('../../assets/icon.png')} 
+              source={require('../../assets/icon-nobg.png')} 
               style={styles.logoImage} 
               resizeMode="contain"
               width={50}
