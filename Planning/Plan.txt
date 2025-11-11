@@ -7,7 +7,7 @@ NOME DA IA: ATLAS
 PLANO: 
 1. Planejamento dos Requisitos Funcionais e Não Funcionais
 2. Arquitetura do Projeto
-3. Criação do Projeto 
+3. Criação do Projeto
 4. Desenvolvimento do App
 5. Testes e Correções
 6. Lançamento do Aplicativo

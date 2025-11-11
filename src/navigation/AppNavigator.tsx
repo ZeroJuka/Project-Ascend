@@ -21,11 +21,19 @@ export default function AppNavigator() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    //Guarda Session no cache para não ter que fazer login novamente
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    // Guarda Session no cache para não ter que fazer login novamente
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+      } catch (error) {
+        console.error('Erro ao obter sessão inicial:', error);
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });

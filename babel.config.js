@@ -6,10 +6,11 @@ module.exports = function (api) {
       ["module:react-native-dotenv", {
         moduleName: "@env",
         path: ".env",
+        example: ".env.example",
         blacklist: null,
         whitelist: null,
-        safe: false,
-        allowUndefined: true
+        safe: true,
+        allowUndefined: false
       }]
     ]
   };
