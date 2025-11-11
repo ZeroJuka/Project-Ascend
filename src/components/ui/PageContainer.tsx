@@ -14,6 +14,7 @@ type PageContainerProps = {
   children: React.ReactNode
 }
 
+
 type TesteContainerProps = {
   title?: string
   activeScreen?: Parameters<typeof Footer>[0]['activeScreen']
@@ -22,6 +23,17 @@ type TesteContainerProps = {
   showFooter?: boolean
   children: React.ReactNode
 }
+
+
+type TesteContainerProps2 = {
+  title?: string
+  activeScreen?: Parameters<typeof Footer>[0]['activeScreen']
+  showProfileButton?: boolean
+  onProfilePress?: () => void
+  showFooter?: boolean
+  children: React.ReactNode
+}
+
 
 
 export default function PageContainer({ title, activeScreen, showProfileButton = true, onProfilePress, showFooter = true, children }: PageContainerProps) {
