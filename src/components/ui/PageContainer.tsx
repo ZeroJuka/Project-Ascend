@@ -14,33 +14,14 @@ type PageContainerProps = {
   children: React.ReactNode
 }
 
-
-type TesteContainerProps = {
+type TestePR = {
   title?: string
-  activeScreen?: Parameters<typeof Footer>[0]['activeScreen']
-  showProfileButton?: boolean
-  onProfilePress?: () => void
-  showFooter?: boolean
-  children: React.ReactNode
 }
-
-
-type TesteContainerProps2 = {
-  title?: string
-  activeScreen?: Parameters<typeof Footer>[0]['activeScreen']
-  showProfileButton?: boolean
-  onProfilePress?: () => void
-  showFooter?: boolean
-  children: React.ReactNode
-}
-
-
 
 export default function PageContainer({ title, activeScreen, showProfileButton = true, onProfilePress, showFooter = true, children }: PageContainerProps) {
   const { grid } = useResponsive()
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header removido para visual moderno e limpo */}
       <View style={[
         styles.content,
         { paddingHorizontal: grid.containerPadding, paddingBottom: showFooter ? 88 : spacing.md }
