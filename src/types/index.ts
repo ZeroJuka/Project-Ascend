@@ -10,7 +10,7 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Home: undefined;
-  Chat: undefined;
+  Chat: { initialText?: string } | undefined;
   Transactions: undefined;
   Goals: undefined;
   Analytics: undefined;

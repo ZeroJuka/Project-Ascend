@@ -43,7 +43,7 @@ const Footer: React.FC<FooterProps> = ({ activeScreen }) => {
   const stopRecording = async () => {
     const result = await audioManager.stopRecording();
     if (result.success && result.transcription) {
-      navigation.navigate('Chat');
+      navigation.navigate('Chat', { initialText: result.transcription });
     }
   };
 

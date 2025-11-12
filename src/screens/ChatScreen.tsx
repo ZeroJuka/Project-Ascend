@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import PageContainer from '../components/ui/PageContainer';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, gradients, elevation } from '../utils/theme';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { callGeminiAPI } from '../lib/genai';
@@ -15,12 +15,15 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Chat'>>();
+  const initialText = route.params?.initialText;
 
-  const sendMessage = async () => {
-    if (!inputText.trim()) return;
-    const userMessage: Message = { id: Date.now().toString(), text: inputText, isUser: true };
+  const sendMessage = async (textOverride?: string) => {
+    const text = (textOverride ?? inputText).trim();
+    if (!text) return;
+    const userMessage: Message = { id: Date.now().toString(), text, isUser: true };
     setMessages(prev => [...prev, userMessage]);
-    setInputText('');
+    if (!textOverride) setInputText('');
     try {
       const response = await callGeminiAPI(userMessage.text);
       const aiText = response?.candidates?.[0]?.content?.parts?.[0]?.text || '...';
@@ -29,6 +32,13 @@ export default function ChatScreen() {
       setMessages(prev => [...prev, { id: (Date.now()+1).toString(), text: 'Erro ao enviar.', isUser: false }]);
     }
   };
+
+  // Auto-send transcription if provided
+  useEffect(() => {
+    if (initialText) {
+      sendMessage(initialText);
+    }
+  }, [initialText]);
 
   const renderMessage = ({ item }: { item: Message }) => (
     <View style={[styles.row, item.isUser ? styles.rowEnd : styles.rowStart]}>
@@ -70,7 +80,11 @@ export default function ChatScreen() {
           placeholder="Digite sua mensagem..."
           placeholderTextColor={colors.light.subtext}
         />
-        <TouchableOpacity style={[styles.sendButton, !inputText.trim() && styles.sendDisabled]} onPress={sendMessage} disabled={!inputText.trim()}>
+        <TouchableOpacity
+          style={[styles.sendButton, !inputText.trim() && styles.sendDisabled]}
+          onPress={() => sendMessage()}
+          disabled={!inputText.trim()}
+        >
           <Ionicons name="send" size={18} color={inputText.trim() ? '#ffffff' : colors.light.subtext} />
         </TouchableOpacity>
       </KeyboardAvoidingView>

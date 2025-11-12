@@ -14,10 +14,6 @@ type PageContainerProps = {
   children: React.ReactNode
 }
 
-type TestePR = {
-  title?: string
-}
-
 export default function PageContainer({ title, activeScreen, showProfileButton = true, onProfilePress, showFooter = true, children }: PageContainerProps) {
   const { grid } = useResponsive()
   return (
@@ -36,6 +32,5 @@ export default function PageContainer({ title, activeScreen, showProfileButton =
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  // Como o header foi removido, reduzimos o espaçamento superior
   content: { flex: 1, paddingTop: spacing.md },
 })
