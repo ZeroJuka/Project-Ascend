@@ -1,0 +1,180 @@
+-- Create categories table
+CREATE TABLE categories (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    color VARCHAR(7) NOT NULL DEFAULT '#3B82F6',
+    icon VARCHAR(50) DEFAULT 'dollar-sign',
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create transactions table
+CREATE TABLE transactions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
+    amount DECIMAL(10,2) NOT NULL,
+    description TEXT NOT NULL,
+    transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create goals table
+CREATE TABLE goals (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    target_amount DECIMAL(10,2) NOT NULL,
+    current_amount DECIMAL(10,2) DEFAULT 0,
+    goal_type VARCHAR(20) NOT NULL CHECK (goal_type IN ('spend_less', 'spend_more', 'save')),
+    time_period VARCHAR(20) NOT NULL CHECK (time_period IN ('daily', 'weekly', 'monthly', 'yearly', 'one_time')),
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    end_date DATE,
+    is_recurring BOOLEAN DEFAULT FALSE,
+    category_ids UUID[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create bills table
+CREATE TABLE bills (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    due_date DATE NOT NULL,
+    frequency VARCHAR(20) NOT NULL CHECK (frequency IN ('once', 'weekly', 'monthly', 'quarterly', 'yearly')),
+    category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
+    is_paid BOOLEAN DEFAULT FALSE,
+    paid_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create chat messages table
+CREATE TABLE chat_messages (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    sender VARCHAR(10) NOT NULL CHECK (sender IN ('user', 'ai')),
+    message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('text', 'voice', 'system')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create default categories
+INSERT INTO categories (name, color, icon, is_default) VALUES
+('Food & Dining', '#FF6B6B', 'utensils', TRUE),
+('Transportation', '#4ECDC4', 'car', TRUE),
+('Shopping', '#45B7D1', 'shopping-bag', TRUE),
+('Entertainment', '#96CEB4', 'gamepad', TRUE),
+('Health & Fitness', '#FFEAA7', 'heart', TRUE),
+('Bills & Utilities', '#DDA0DD', 'lightbulb', TRUE),
+('Travel', '#74B9FF', 'plane', TRUE),
+('Education', '#FDCB6E', 'book', TRUE),
+('Income', '#00B894', 'dollar-sign', TRUE),
+('Other', '#636E72', 'more-horizontal', TRUE);
+
+-- Enable RLS on all tables
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies
+-- Categories: Users can only see their own categories and default categories
+CREATE POLICY "Users can view own categories" ON categories
+    FOR SELECT USING (auth.uid() = user_id OR is_default = TRUE);
+
+CREATE POLICY "Users can insert own categories" ON categories
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own categories" ON categories
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own categories" ON categories
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Transactions: Users can only see their own transactions
+CREATE POLICY "Users can view own transactions" ON transactions
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own transactions" ON transactions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own transactions" ON transactions
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own transactions" ON transactions
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Goals: Users can only see their own goals
+CREATE POLICY "Users can view own goals" ON goals
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own goals" ON goals
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own goals" ON goals
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own goals" ON goals
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Bills: Users can only see their own bills
+CREATE POLICY "Users can view own bills" ON bills
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own bills" ON bills
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own bills" ON bills
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own bills" ON bills
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Chat Messages: Users can only see their own messages
+CREATE POLICY "Users can view own chat messages" ON chat_messages
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own chat messages" ON chat_messages
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Grant permissions to anon and authenticated roles
+GRANT SELECT ON categories TO anon, authenticated;
+GRANT INSERT ON categories TO authenticated;
+GRANT UPDATE ON categories TO authenticated;
+GRANT DELETE ON categories TO authenticated;
+
+GRANT SELECT ON transactions TO anon, authenticated;
+GRANT INSERT ON transactions TO authenticated;
+GRANT UPDATE ON transactions TO authenticated;
+GRANT DELETE ON transactions TO authenticated;
+
+GRANT SELECT ON goals TO anon, authenticated;
+GRANT INSERT ON goals TO authenticated;
+GRANT UPDATE ON goals TO authenticated;
+GRANT DELETE ON goals TO authenticated;
+
+GRANT SELECT ON bills TO anon, authenticated;
+GRANT INSERT ON bills TO authenticated;
+GRANT UPDATE ON bills TO authenticated;
+GRANT DELETE ON bills TO authenticated;
+
+GRANT SELECT ON chat_messages TO anon, authenticated;
+GRANT INSERT ON chat_messages TO authenticated;
+
+-- Create indexes for better performance
+CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX idx_transactions_category_id ON transactions(category_id);
+CREATE INDEX idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX idx_categories_user_id ON categories(user_id);
+CREATE INDEX idx_goals_user_id ON goals(user_id);
+CREATE INDEX idx_bills_user_id ON bills(user_id);
+CREATE INDEX idx_chat_messages_user_id ON chat_messages(user_id);
