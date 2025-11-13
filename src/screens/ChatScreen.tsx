@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -17,12 +18,17 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { GeminiAIService } from '../services/GeminiAIService'
 
-interface Message {
-  id: string
+interface ChatEntry {
   message: string
   sender: 'user' | 'ai'
   message_type: 'text' | 'voice' | 'system'
   created_at: string
+  meta?: {
+    pendingAction?: {
+      type: 'transaction' | 'goal' | 'bill'
+      data: any
+    }
+  }
 }
 
 interface ConfirmationModal {
@@ -33,7 +39,7 @@ interface ConfirmationModal {
 }
 
 export default function ChatScreen({ route }: any) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatEntry[]>([])
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
@@ -46,18 +52,21 @@ export default function ChatScreen({ route }: any) {
   const { user } = useAuth()
   const flatListRef = useRef<FlatList>(null)
   const aiService = useRef(new GeminiAIService(user?.id || ''))
+  const lastVoiceRef = useRef<string | null>(null)
 
   useEffect(() => {
     fetchMessages()
-    
-    // If voice message from route, send it
-    if (route.params?.voiceMessage) {
-      handleVoiceMessage(route.params.voiceMessage)
-    }
   }, [])
 
   useEffect(() => {
-    // Scroll to bottom when messages change
+    const vm = route.params?.voiceMessage
+    if (vm && vm !== lastVoiceRef.current) {
+      lastVoiceRef.current = vm
+      handleVoiceMessage(vm)
+    }
+  }, [route.params?.voiceMessage])
+
+  useEffect(() => {
     if (messages.length > 0) {
       flatListRef.current?.scrollToEnd({ animated: true })
     }
@@ -67,44 +76,59 @@ export default function ChatScreen({ route }: any) {
     try {
       const { data, error } = await supabase
         .from('chat_messages')
-        .select('*')
+        .select('conversation')
         .eq('user_id', user?.id)
-        .order('created_at', { ascending: true })
+        .single()
 
-      if (error) throw error
-      setMessages(data || [])
+      if (error && error.code !== 'PGRST116') throw error
+      const conversation: ChatEntry[] = data?.conversation || []
+      setMessages(conversation)
     } catch (error) {
-      console.error('Error fetching messages:', error)
+      console.error('Error fetching conversation:', error)
     }
   }
 
-  const saveMessage = async (message: string, sender: 'user' | 'ai', messageType: 'text' | 'voice' | 'system') => {
+  const persistUpsert = async (capped: ChatEntry[]) => {
     try {
-      const { data, error } = await supabase
+      await supabase
         .from('chat_messages')
-        .insert({
-          user_id: user?.id,
-          message,
-          sender,
-          message_type: messageType,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
+        .upsert({ user_id: user?.id as string, conversation: capped, updated_at: new Date().toISOString() })
     } catch (error) {
-      console.error('Error saving message:', error)
-      return null
+      console.error('Error persisting conversation:', error)
     }
+  }
+
+  const appendMessage = async (entry: ChatEntry) => {
+    let nextCapped: ChatEntry[] = []
+    setMessages(prev => {
+      const next = [...prev, entry]
+      nextCapped = next.slice(Math.max(0, next.length - 30))
+      return nextCapped
+    })
+    await persistUpsert(nextCapped)
+    return entry
+  }
+
+  const resolvePendingAt = async (index: number, removeAfterConfirm?: boolean) => {
+    let nextCapped: ChatEntry[] = []
+    setMessages(prev => {
+      const next = prev.slice()
+      if (removeAfterConfirm) {
+        next.splice(index, 1)
+      } else {
+        const entry = { ...next[index] }
+        if (entry.meta?.pendingAction) entry.meta = undefined
+        next[index] = entry
+      }
+      nextCapped = next.slice(Math.max(0, next.length - 30))
+      return nextCapped
+    })
+    await persistUpsert(nextCapped)
   }
 
   const handleVoiceMessage = async (voiceMessage: string) => {
     // Save the voice message
-    const savedMessage = await saveMessage(voiceMessage, 'user', 'voice')
-    if (savedMessage) {
-      setMessages(prev => [...prev, savedMessage])
-    }
+    await appendMessage({ message: voiceMessage, sender: 'user', message_type: 'voice', created_at: new Date().toISOString() })
 
     // Process with AI
     await processAIMessage(voiceMessage, 'voice')
@@ -118,10 +142,7 @@ export default function ChatScreen({ route }: any) {
     setLoading(true)
 
     // Save user message
-    const savedMessage = await saveMessage(message, 'user', 'text')
-    if (savedMessage) {
-      setMessages(prev => [...prev, savedMessage])
-    }
+    await appendMessage({ message, sender: 'user', message_type: 'text', created_at: new Date().toISOString() })
 
     // Process with AI
     await processAIMessage(message, 'text')
@@ -129,33 +150,31 @@ export default function ChatScreen({ route }: any) {
 
   const processAIMessage = async (message: string, messageType: 'text' | 'voice') => {
     try {
+      console.log('Processing AI message:', message)
       const response = await aiService.current.generateFinancialInsight(message)
+      console.log('AI response received:', response)
       
       // Save AI response
-      const savedAIMessage = await saveMessage(response.content, 'ai', 'text')
-      if (savedAIMessage) {
-        setMessages(prev => [...prev, savedAIMessage])
-      }
+      await appendMessage({ message: response.content, sender: 'ai', message_type: 'text', created_at: new Date().toISOString() })
 
       // Handle special cases (transaction or goal creation)
-      if (response.type === 'transaction' || response.type === 'goal') {
-        setConfirmationModal({
-          visible: true,
-          type: response.type,
-          data: response.data,
-          message: response.content
+      if (response.type === 'transaction' || response.type === 'goal' || response.type === 'bill') {
+        await appendMessage({
+          message: response.content,
+          sender: 'ai',
+          message_type: 'system',
+          created_at: new Date().toISOString(),
+          meta: { pendingAction: { type: response.type as any, data: response.data } }
         })
       }
     } catch (error) {
       console.error('Error processing AI message:', error)
-      const errorMessage = await saveMessage(
-        'Sorry, I encountered an error processing your request. Please try again.',
-        'ai',
-        'text'
-      )
-      if (errorMessage) {
-        setMessages(prev => [...prev, errorMessage])
-      }
+      await appendMessage({
+        message: 'Sorry, I encountered an error processing your request. Please try again.',
+        sender: 'ai',
+        message_type: 'text',
+        created_at: new Date().toISOString()
+      })
     } finally {
       setLoading(false)
     }
@@ -178,9 +197,11 @@ export default function ChatScreen({ route }: any) {
     }
   }
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: ChatEntry, index: number }) => {
     const isUser = item.sender === 'user'
     const isVoice = item.message_type === 'voice'
+    const hasPending = !!item.meta?.pendingAction
+    const isConfirmation = item.message_type === 'system' && hasPending
     
     return (
       <View style={[
@@ -191,13 +212,15 @@ export default function ChatScreen({ route }: any) {
           colors={
             isUser
               ? ['#4A90E2', '#357ABD']
-              : isVoice
-              ? ['#FFD700', '#FFA500']
+              : (isVoice || isConfirmation)
+              ? ['#FFD76A', '#FFC04D']
               : ['#F0F0F0', '#E8E8E8']
           }
           style={[
             styles.messageBubble,
-            isUser ? styles.userMessageBubble : styles.aiMessageBubble
+            isUser ? styles.userMessageBubble 
+            : isVoice ? styles.voiceMessageBubble 
+            : styles.aiMessageBubble
           ]}
         >
           {isVoice && (
@@ -208,16 +231,127 @@ export default function ChatScreen({ route }: any) {
           )}
           <Text style={[
             styles.messageText,
-            isUser || isVoice ? styles.messageTextLight : styles.messageTextDark
+            isUser || isVoice || isConfirmation ? styles.messageTextLight : styles.messageTextDark
           ]}>
             {item.message}
           </Text>
           <Text style={[
             styles.messageTime,
-            isUser || isVoice ? styles.messageTimeLight : styles.messageTimeDark
+            isUser || isVoice || isConfirmation ? styles.messageTimeLight : styles.messageTimeDark
           ]}>
             {new Date(item.created_at).toLocaleTimeString()}
           </Text>
+          {isConfirmation && item.meta?.pendingAction?.data && (
+            <View style={styles.dataContainer}>
+              {item.meta!.pendingAction!.type === 'transaction' ? (
+                <>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Amount:</Text>
+                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.amount}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Description:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.description}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Category:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.category || item.meta!.pendingAction!.data.category_name}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Type:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.type}</Text>
+                  </View>
+                </>
+              ) : item.meta!.pendingAction!.type === 'goal' ? (
+                <>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Title:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.title}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Target Amount:</Text>
+                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.target_amount}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Type:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.goal_type}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Period:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.time_period}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Title:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.title}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Amount:</Text>
+                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.amount}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Due Date:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.due_date || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Category:</Text>
+                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.category || item.meta!.pendingAction!.data.category_name}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+          {isConfirmation && (
+            <View style={styles.inlineActions}>
+              <TouchableOpacity
+                style={styles.rejectButton}
+                onPress={async () => {
+                  await appendMessage({
+                    message: 'Registration cancelled.',
+                    sender: 'ai',
+                    message_type: 'system',
+                    created_at: new Date().toISOString()
+                  })
+                  await resolvePendingAt(index)
+                }}
+              >
+                <Text style={styles.rejectText}>Reject</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.acceptButton}
+                onPress={async () => {
+                  try {
+                    const action = item.meta!.pendingAction!
+                    if (action.type === 'transaction') {
+                      await aiService.current.createTransaction(action.data)
+                    } else if (action.type === 'goal') {
+                      await aiService.current.createGoal(action.data)
+                    } else if (action.type === 'bill') {
+                      await aiService.current.createBill(action.data)
+                    }
+                    await appendMessage({
+                      message: 'Registration confirmed.',
+                      sender: 'ai',
+                      message_type: 'system',
+                      created_at: new Date().toISOString()
+                    })
+                    await resolvePendingAt(index, true)
+                  } catch (e) {
+                    await appendMessage({
+                      message: 'Failed to register. Please try again.',
+                      sender: 'ai',
+                      message_type: 'system',
+                      created_at: new Date().toISOString()
+                    })
+                  }
+                }}
+              >
+                <Text style={styles.acceptText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </LinearGradient>
       </View>
     )
@@ -238,7 +372,7 @@ export default function ChatScreen({ route }: any) {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, idx) => `${item.created_at}-${item.sender}-${idx}`}
         contentContainerStyle={styles.messagesContainer}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -280,93 +414,7 @@ export default function ChatScreen({ route }: any) {
         </View>
       </View>
 
-      {/* Confirmation Modal */}
-      <Modal
-        visible={confirmationModal.visible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setConfirmationModal({ visible: false, type: 'transaction', data: null, message: '' })}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {confirmationModal.type === 'transaction' ? 'Confirm Transaction' : 'Confirm Goal'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setConfirmationModal({ visible: false, type: 'transaction', data: null, message: '' })}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalBody}>
-              <Text style={styles.modalMessage}>{confirmationModal.message}</Text>
-              
-              {confirmationModal.data && (
-                <View style={styles.dataContainer}>
-                  {confirmationModal.type === 'transaction' ? (
-                    <>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Amount:</Text>
-                        <Text style={styles.dataValue}>${confirmationModal.data.amount}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Description:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.description}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Category:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.category}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Type:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.type}</Text>
-                      </View>
-                    </>
-                  ) : (
-                    <>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Title:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.title}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Target Amount:</Text>
-                        <Text style={styles.dataValue}>${confirmationModal.data.target_amount}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Type:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.goal_type}</Text>
-                      </View>
-                      <View style={styles.dataRow}>
-                        <Text style={styles.dataLabel}>Period:</Text>
-                        <Text style={styles.dataValue}>{confirmationModal.data.time_period}</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
-              )}
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setConfirmationModal({ visible: false, type: 'transaction', data: null, message: '' })}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={handleConfirmAction}
-                >
-                  <Text style={styles.confirmButtonText}>
-                    {confirmationModal.type === 'transaction' ? 'Create Transaction' : 'Create Goal'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Inline confirmations handled in message bubbles */}
     </KeyboardAvoidingView>
   )
 }
@@ -415,8 +463,37 @@ const styles = StyleSheet.create({
   userMessageBubble: {
     borderBottomRightRadius: 4,
   },
+  voiceMessageBubble: {
+    borderBottomRightRadius: 4,
+  },
   aiMessageBubble: {
     borderBottomLeftRadius: 4,
+  },
+  inlineActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 8,
+  },
+  rejectButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.3)'
+  },
+  rejectText: {
+    color: '#fff',
+    fontWeight: '600'
+  },
+  acceptButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.6)'
+  },
+  acceptText: {
+    color: '#8A5A00',
+    fontWeight: '700'
   },
   voiceIndicator: {
     flexDirection: 'row',

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": "true",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -21,10 +21,14 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": "false"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "HUGGINGFACE_API_KEY": "hf_example_key_replace_with_real_key",
+      "WHISPER_MODEL_URL": "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
     }
   }
 }

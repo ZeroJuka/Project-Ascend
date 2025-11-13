@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -21,13 +21,22 @@ export default function HomeScreen() {
     monthlyIncome: 0,
     monthlyExpenses: 0,
   })
+  const [insights, setInsights] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const { user } = useAuth()
   const navigation = useNavigation()
+  const isFocused = useIsFocused()
 
   useEffect(() => {
     fetchFinancialData()
   }, [])
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    if (isFocused) {
+      fetchFinancialData()
+    }
+  }, [isFocused])
 
   const fetchFinancialData = async () => {
     try {
@@ -67,6 +76,9 @@ export default function HomeScreen() {
         ?.filter(t => t.type === 'expense')
         .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
 
+      // Generate insights
+      const insights = generateInsights(transactions || [], monthlyIncome, monthlyExpenses)
+
       setFinancialData({
         totalBalance: totalIncome - totalExpenses,
         totalIncome,
@@ -74,11 +86,65 @@ export default function HomeScreen() {
         monthlyIncome,
         monthlyExpenses,
       })
+      setInsights(insights)
     } catch (error) {
       console.error('Error fetching financial data:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const generateInsights = (transactions: any[], monthlyIncome: number, monthlyExpenses: number) => {
+    const insights = []
+    
+    // Spending vs Income insight
+    if (monthlyExpenses > monthlyIncome * 0.8) {
+      insights.push({
+        id: 'spending-high',
+        title: 'High Spending Alert',
+        description: `You've spent ${((monthlyExpenses / monthlyIncome) * 100).toFixed(0)}% of your income this month`,
+        icon: 'warning',
+        color: '#FF6B6B',
+        action: 'Review spending'
+      })
+    }
+
+    // Savings opportunity
+    if (monthlyIncome > monthlyExpenses) {
+      const savings = monthlyIncome - monthlyExpenses
+      insights.push({
+        id: 'savings-opportunity',
+        title: 'Savings Opportunity',
+        description: `You could save $${savings.toFixed(0)} this month`,
+        icon: 'trending-up',
+        color: '#50C878',
+        action: 'Set savings goal'
+      })
+    }
+
+    // Top spending category
+    const expensesByCategory = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => {
+        acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount)
+        return acc
+      }, {})
+    
+    const topCategory = Object.entries(expensesByCategory)
+      .sort(([,a], [,b]) => (b as number) - (a as number))[0]
+    
+    if (topCategory) {
+      insights.push({
+        id: 'top-category',
+        title: 'Top Spending Category',
+        description: `${topCategory[0]}: $${(topCategory[1] as number).toFixed(0)}`,
+        icon: 'pricetag',
+        color: '#45B7D1',
+        action: 'View details'
+      })
+    }
+
+    return insights.slice(0, 3) // Show max 3 insights
   }
 
   const quickActions = [
@@ -160,6 +226,43 @@ export default function HomeScreen() {
           ))}
         </View>
       </View>
+
+      {/* Quick Insights */}
+      {insights.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Insights</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insightsScroll}>
+            {insights.map((insight) => (
+              <TouchableOpacity
+                key={insight.id}
+                style={[styles.insightCard, { borderLeftColor: insight.color }]}
+                onPress={() => {
+                  if (insight.action === 'Review spending') {
+                    navigation.navigate('Transactions' as never)
+                  } else if (insight.action === 'Set savings goal') {
+                    navigation.navigate('Goals' as never)
+                  } else if (insight.action === 'View details') {
+                    navigation.navigate('Dashboard' as never)
+                  }
+                }}
+              >
+                <View style={styles.insightHeader}>
+                  <Ionicons name={insight.icon as any} size={20} color={insight.color} />
+                  <Text style={[styles.insightTitle, { color: insight.color }]}>
+                    {insight.title}
+                  </Text>
+                </View>
+                <Text style={styles.insightDescription} numberOfLines={2}>
+                  {insight.description}
+                </Text>
+                <Text style={[styles.insightAction, { color: insight.color }]}>
+                  {insight.action}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Monthly Overview */}
       <View style={styles.section}>

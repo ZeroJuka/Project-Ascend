@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -54,10 +55,18 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [timeFilter, setTimeFilter] = useState<'week' | 'month' | 'year'>('month')
   const { user } = useAuth()
+  const isFocused = useIsFocused()
 
   useEffect(() => {
     fetchDashboardData()
   }, [timeFilter])
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    if (isFocused) {
+      fetchDashboardData()
+    }
+  }, [isFocused])
 
   const fetchDashboardData = async () => {
     try {

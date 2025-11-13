@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import CategoryManager from '../components/CategoryManager'
 
 interface Transaction {
   id: string
@@ -41,6 +42,7 @@ export default function TransactionsScreen() {
   const [categories, setCategories] = useState<Category[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [categoryModalVisible, setCategoryModalVisible] = useState(false)
+  const [categoryManagerVisible, setCategoryManagerVisible] = useState(false)
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
@@ -50,6 +52,11 @@ export default function TransactionsScreen() {
   useEffect(() => {
     fetchTransactions()
     fetchCategories()
+  }, [])
+
+  // Force refresh data when categories are updated
+  const refreshData = useCallback(async () => {
+    await Promise.all([fetchTransactions(), fetchCategories()])
   }, [])
 
   const fetchTransactions = async () => {
@@ -108,7 +115,7 @@ export default function TransactionsScreen() {
       setAmount('')
       setDescription('')
       setSelectedCategory(null)
-      fetchTransactions()
+      await fetchTransactions() // Ensure data is fresh
       Alert.alert('Success', 'Transaction added successfully!')
     } catch (error) {
       console.error('Error adding transaction:', error)
@@ -306,10 +313,33 @@ export default function TransactionsScreen() {
               renderItem={renderCategory}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.categoryList}
+              ListFooterComponent={(
+                <TouchableOpacity
+                  style={styles.createCategoryButton}
+                  onPress={() => {
+                    setCategoryModalVisible(false)
+                    setCategoryManagerVisible(true)
+                  }}
+                >
+                  <Ionicons name="add-circle" size={24} color="#4A90E2" />
+                  <Text style={styles.createCategoryText}>Create New Category</Text>
+                </TouchableOpacity>
+              )}
             />
           </View>
         </View>
       </Modal>
+
+      {/* Category Manager Modal */}
+      <CategoryManager
+        visible={categoryManagerVisible}
+        onClose={() => setCategoryManagerVisible(false)}
+        onCategoryCreated={(newCategory) => {
+          setCategories(prev => [...prev, newCategory])
+          setSelectedCategory(newCategory)
+        }}
+        userId={user?.id || ''}
+      />
     </View>
   )
 }
@@ -533,5 +563,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginLeft: 12,
+  },
+  createCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    marginTop: 8,
+  },
+  createCategoryText: {
+    fontSize: 16,
+    color: '#4A90E2',
+    marginLeft: 8,
+    fontWeight: '600',
   },
 })

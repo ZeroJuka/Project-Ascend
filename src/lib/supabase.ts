@@ -181,28 +181,22 @@ export type Database = {
       }
       chat_messages: {
         Row: {
-          id: string
-          user_id: string | null
-          message: string
-          sender: 'user' | 'ai'
-          message_type: 'text' | 'voice' | 'system'
+          user_id: string
+          conversation: any
           created_at: string
+          updated_at: string
         }
         Insert: {
-          id?: string
-          user_id?: string | null
-          message: string
-          sender: 'user' | 'ai'
-          message_type: 'text' | 'voice' | 'system'
+          user_id: string
+          conversation: any
           created_at?: string
+          updated_at?: string
         }
         Update: {
-          id?: string
-          user_id?: string | null
-          message?: string
-          sender?: 'user' | 'ai'
-          message_type?: 'text' | 'voice' | 'system'
+          user_id?: string
+          conversation?: any
           created_at?: string
+          updated_at?: string
         }
       }
     }

@@ -49,3 +49,4 @@ web-build/
 *.mobileprovision
 
 app-builder-prompt.txt
+supabase/

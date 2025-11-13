@@ -9,7 +9,7 @@ export default {
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     splash: {
-      image: "./assets/splash.png",
+      image: "./assets/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
@@ -30,14 +30,7 @@ export default {
     web: {
       favicon: "./assets/favicon.png"
     },
-    plugins: [
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Allow ASCEND to access your microphone for voice transcription."
-        }
-      ]
-    ],
+    plugins: [],
     extra: {
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
