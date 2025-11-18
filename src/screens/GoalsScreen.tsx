@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -16,6 +17,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useIsFocused } from '@react-navigation/native'
 import GoalManager from '../components/GoalManager'
+import { useI18n } from '../contexts/I18nContext'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 interface Goal {
   id: string
@@ -57,6 +60,9 @@ export default function GoalsScreen() {
   const [goalManagerVisible, setGoalManagerVisible] = useState(false)
   const { user } = useAuth()
   const isFocused = useIsFocused()
+  const { t } = useI18n()
+  const insets = useSafeAreaInsets()
+  const [refreshing, setRefreshing] = useState(false)
 
   // Form states
   const [title, setTitle] = useState('')
@@ -178,7 +184,7 @@ export default function GoalsScreen() {
 
   const addGoal = async () => {
     if (!title || !targetAmount) {
-      Alert.alert('Error', 'Please fill in all required fields')
+      Alert.alert(t('goals.alert.error_title'), t('goals.alert.error_fields'))
       return
     }
 
@@ -201,16 +207,16 @@ export default function GoalsScreen() {
       setModalVisible(false)
       resetForm()
       fetchGoals()
-      Alert.alert('Success', 'Goal created successfully!')
+      Alert.alert(t('goals.alert.success_title'), t('goals.alert.success_message'))
     } catch (error) {
       console.error('Error adding goal:', error)
-      Alert.alert('Error', 'Failed to create goal')
+      Alert.alert(t('goals.alert.error_title'), t('goals.alert.error_add'))
     }
   }
 
   const addBill = async () => {
     if (!title || !targetAmount || !dueDate) {
-      Alert.alert('Error', 'Please fill in all required fields')
+      Alert.alert(t('goals.alert.error_title'), t('goals.alert.error_fields'))
       return
     }
 
@@ -231,10 +237,10 @@ export default function GoalsScreen() {
       setModalVisible(false)
       resetForm()
       fetchBills()
-      Alert.alert('Success', 'Bill created successfully!')
+      Alert.alert(t('goals.alert.success_title'), t('bills.alert.success_message'))
     } catch (error) {
       console.error('Error adding bill:', error)
-      Alert.alert('Error', 'Failed to create bill')
+      Alert.alert(t('goals.alert.error_title'), t('bills.alert.error_add'))
     }
   }
 
@@ -290,7 +296,7 @@ export default function GoalsScreen() {
       
       <View style={styles.goalStats}>
         <Text style={styles.goalAmount}>
-          ${item.current_amount.toFixed(2)} / ${item.target_amount.toFixed(2)}
+          {formatCurrency(item.current_amount, language)} / {formatCurrency(item.target_amount, language)}
         </Text>
       </View>
     </View>
@@ -305,10 +311,10 @@ export default function GoalsScreen() {
         <View style={styles.billInfo}>
           <Text style={styles.billTitle}>{item.title}</Text>
           <Text style={styles.billDetails}>
-            Due {new Date(item.due_date).toLocaleDateString()} • {item.frequency}
+            {t('bills.due_prefix')}{new Date(item.due_date).toLocaleDateString()} • {item.frequency}
           </Text>
         </View>
-        <Text style={styles.billAmount}>${item.amount}</Text>
+        <Text style={styles.billAmount}>{formatCurrency(item.amount, language)}</Text>
       </View>
       
       <View style={styles.billActions}>
@@ -323,7 +329,7 @@ export default function GoalsScreen() {
             styles.payButtonText,
             item.is_paid && styles.payButtonTextPaid
           ]}>
-            {item.is_paid ? 'Paid' : 'Mark as Paid'}
+            {item.is_paid ? t('bills.pay.paid') : t('bills.pay.mark')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -332,8 +338,8 @@ export default function GoalsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Goals & Bills</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.title}>{t('goals_bills.title')}</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
@@ -357,7 +363,7 @@ export default function GoalsScreen() {
             styles.tabButtonText,
             activeTab === 'goals' && styles.tabButtonTextActive
           ]}>
-            Goals
+            {t('goals.tab')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -371,7 +377,7 @@ export default function GoalsScreen() {
             styles.tabButtonText,
             activeTab === 'bills' && styles.tabButtonTextActive
           ]}>
-            Bills
+            {t('bills.tab')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -383,11 +389,12 @@ export default function GoalsScreen() {
           renderItem={renderGoal}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="trophy-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>No goals yet</Text>
-              <Text style={styles.emptySubtext}>Create your first financial goal</Text>
+              <Text style={styles.emptyText}>{t('goals.empty.title')}</Text>
+              <Text style={styles.emptySubtext}>{t('goals.empty.subtitle')}</Text>
             </View>
           }
         />
@@ -397,11 +404,12 @@ export default function GoalsScreen() {
           renderItem={renderBill}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>No bills yet</Text>
-              <Text style={styles.emptySubtext}>Add your recurring bills</Text>
+              <Text style={styles.emptyText}>{t('bills.empty.title')}</Text>
+              <Text style={styles.emptySubtext}>{t('bills.empty.subtitle')}</Text>
             </View>
           }
         />
@@ -753,3 +761,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 })
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([fetchGoals(), fetchBills()])
+    setRefreshing(false)
+  }

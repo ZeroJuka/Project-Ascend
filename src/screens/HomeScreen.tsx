@@ -1,17 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState({
@@ -23,9 +20,13 @@ export default function HomeScreen() {
   })
   const [insights, setInsights] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const { user } = useAuth()
+  const { t } = useI18n()
+  const { displayName, avatarUri, language } = useSettings()
   const navigation = useNavigation()
   const isFocused = useIsFocused()
+  const insets = useSafeAreaInsets()
 
   useEffect(() => {
     fetchFinancialData()
@@ -40,6 +41,7 @@ export default function HomeScreen() {
 
   const fetchFinancialData = async () => {
     try {
+      if (!refreshing) setLoading(true)
       const currentDate = new Date()
       const currentMonth = currentDate.getMonth() + 1
       const currentYear = currentDate.getFullYear()
@@ -91,6 +93,7 @@ export default function HomeScreen() {
       console.error('Error fetching financial data:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -149,19 +152,19 @@ export default function HomeScreen() {
 
   const quickActions = [
     {
-      title: 'Add Transaction',
+      title: t('home.action.add_transaction'),
       icon: 'add-circle',
       color: '#4A90E2',
       onPress: () => navigation.navigate('Transactions' as never),
     },
     {
-      title: 'View Goals',
+      title: t('home.action.view_goals'),
       icon: 'trophy',
       color: '#50C878',
       onPress: () => navigation.navigate('Goals' as never),
     },
     {
-      title: 'Analytics',
+      title: t('home.action.analytics'),
       icon: 'stats-chart',
       color: '#FF6B6B',
       onPress: () => navigation.navigate('Dashboard' as never),
@@ -177,10 +180,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Good morning!</Text>
-        <Text style={styles.userName}>{user?.email?.split('@')[0]}</Text>
+    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchFinancialData() }} />}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.navigate('User' as never)}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder} />
+            )}
+          </TouchableOpacity>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.greeting}>{t('home.greeting')}</Text>
+            <Text style={styles.userName}>{displayName || user?.email?.split('@')[0]}</Text>
+          </View>
+        </View>
       </View>
 
       {/* Balance Card */}
@@ -188,21 +202,21 @@ export default function HomeScreen() {
         colors={['#4A90E2', '#357ABD']}
         style={styles.balanceCard}
       >
-        <Text style={styles.balanceLabel}>Total Balance</Text>
+        <Text style={styles.balanceLabel}>{t('home.total_balance')}</Text>
         <Text style={styles.balanceAmount}>
-          ${financialData.totalBalance.toLocaleString()}
+          {formatCurrency(financialData.totalBalance, language)}
         </Text>
         <View style={styles.balanceRow}>
           <View style={styles.balanceItem}>
             <Ionicons name="trending-up" size={16} color="#50C878" />
             <Text style={styles.balanceItemText}>
-              ${financialData.monthlyIncome.toLocaleString()}
+              {formatCurrency(financialData.monthlyIncome, language)}
             </Text>
           </View>
           <View style={styles.balanceItem}>
             <Ionicons name="trending-down" size={16} color="#FF6B6B" />
             <Text style={styles.balanceItemText}>
-              ${financialData.monthlyExpenses.toLocaleString()}
+              {formatCurrency(financialData.monthlyExpenses, language)}
             </Text>
           </View>
         </View>
@@ -210,7 +224,7 @@ export default function HomeScreen() {
 
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t('home.quick_actions')}</Text>
         <View style={styles.actionsGrid}>
           {quickActions.map((action, index) => (
             <TouchableOpacity
@@ -230,7 +244,7 @@ export default function HomeScreen() {
       {/* Quick Insights */}
       {insights.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Insights</Text>
+          <Text style={styles.sectionTitle}>{t('home.quick_insights')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insightsScroll}>
             {insights.map((insight) => (
               <TouchableOpacity
@@ -266,28 +280,28 @@ export default function HomeScreen() {
 
       {/* Monthly Overview */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>This Month</Text>
+        <Text style={styles.sectionTitle}>{t('home.this_month')}</Text>
         <View style={styles.overviewCard}>
           <View style={styles.overviewItem}>
-            <Text style={styles.overviewLabel}>Income</Text>
+            <Text style={styles.overviewLabel}>{t('home.income')}</Text>
             <Text style={[styles.overviewValue, { color: '#50C878' }]}>
               ${financialData.monthlyIncome.toLocaleString()}
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.overviewItem}>
-            <Text style={styles.overviewLabel}>Expenses</Text>
+            <Text style={styles.overviewLabel}>{t('home.expenses')}</Text>
             <Text style={[styles.overviewValue, { color: '#FF6B6B' }]}>
               ${financialData.monthlyExpenses.toLocaleString()}
             </Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.overviewItem}>
-            <Text style={styles.overviewLabel}>Net</Text>
+            <Text style={styles.overviewLabel}>{t('home.net')}</Text>
             <Text style={[styles.overviewValue, { 
               color: financialData.monthlyIncome - financialData.monthlyExpenses >= 0 ? '#50C878' : '#FF6B6B' 
             }]}>
-              ${(financialData.monthlyIncome - financialData.monthlyExpenses).toLocaleString()}
+              {formatCurrency(financialData.monthlyIncome - financialData.monthlyExpenses, language)}
             </Text>
           </View>
         </View>
@@ -307,8 +321,27 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     paddingBottom: 24,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTextCol: {
+    flexDirection: 'column',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
+  },
+  avatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
   },
   greeting: {
     fontSize: 14,

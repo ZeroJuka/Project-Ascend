@@ -11,12 +11,17 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { GeminiAIService } from '../services/GeminiAIService'
+import { useI18n } from '../contexts/I18nContext'
+import { useSettings } from '../contexts/SettingsContext'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { formatCurrency } from '../utils/currency'
 
 interface ChatEntry {
   message: string
@@ -51,7 +56,15 @@ export default function ChatScreen({ route }: any) {
   
   const { user } = useAuth()
   const flatListRef = useRef<FlatList>(null)
-  const aiService = useRef(new GeminiAIService(user?.id || ''))
+  const { language } = useSettings()
+  const { t } = useI18n()
+  const aiService = useRef(new GeminiAIService(user?.id || '', language))
+  const insets = useSafeAreaInsets()
+  const [refreshing, setRefreshing] = useState(false)
+  
+  useEffect(() => {
+    aiService.current = new GeminiAIService(user?.id || '', language)
+  }, [language, user?.id])
   const lastVoiceRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -74,15 +87,17 @@ export default function ChatScreen({ route }: any) {
 
   const fetchMessages = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('chat_messages')
-        .select('conversation')
+        .select('conversation, updated_at')
         .eq('user_id', user?.id)
-        .single()
+        .order('updated_at', { ascending: false })
+        .limit(1)
 
-      if (error && error.code !== 'PGRST116') throw error
-      const conversation: ChatEntry[] = data?.conversation || []
-      setMessages(conversation)
+      const conversation: ChatEntry[] | undefined = data?.[0]?.conversation
+      if (conversation && conversation.length) {
+        setMessages(conversation)
+      }
     } catch (error) {
       console.error('Error fetching conversation:', error)
     }
@@ -92,7 +107,10 @@ export default function ChatScreen({ route }: any) {
     try {
       await supabase
         .from('chat_messages')
-        .upsert({ user_id: user?.id as string, conversation: capped, updated_at: new Date().toISOString() })
+        .upsert(
+          { user_id: user?.id as string, conversation: capped, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        )
     } catch (error) {
       console.error('Error persisting conversation:', error)
     }
@@ -247,7 +265,7 @@ export default function ChatScreen({ route }: any) {
                 <>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Amount:</Text>
-                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.amount}</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number(item.meta!.pendingAction!.data.amount), language)}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Description:</Text>
@@ -289,7 +307,7 @@ export default function ChatScreen({ route }: any) {
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Amount:</Text>
-                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.amount}</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number(item.meta!.pendingAction!.data.amount), language)}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Due Date:</Text>
@@ -363,9 +381,9 @@ export default function ChatScreen({ route }: any) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>ASCEND AI Assistant</Text>
-        <Text style={styles.headerSubtitle}>Ask me about your finances</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.headerTitle}>{t('chat.title')}</Text>
+        <Text style={styles.headerSubtitle}>{t('chat.subtitle')}</Text>
       </View>
 
       <FlatList
@@ -375,6 +393,7 @@ export default function ChatScreen({ route }: any) {
         keyExtractor={(item, idx) => `${item.created_at}-${item.sender}-${idx}`}
         contentContainerStyle={styles.messagesContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchMessages(); setRefreshing(false) }} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="sparkles" size={64} color="#4A90E2" />
@@ -391,7 +410,7 @@ export default function ChatScreen({ route }: any) {
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
-            placeholder="Ask about your finances..."
+            placeholder={t('chat.placeholder')}
             value={inputText}
             onChangeText={setInputText}
             multiline

@@ -9,11 +9,16 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  RefreshControl,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
 import CategoryManager from '../components/CategoryManager'
 
 interface Transaction {
@@ -47,7 +52,20 @@ export default function TransactionsScreen() {
   const [description, setDescription] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense')
+  const [refreshing, setRefreshing] = useState(false)
+  const [categoryPickerTarget, setCategoryPickerTarget] = useState<'add' | 'edit' | 'filter'>('add')
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
+  const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null)
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [editTx, setEditTx] = useState<Transaction | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editType, setEditType] = useState<'income' | 'expense'>('expense')
+  const [editCategory, setEditCategory] = useState<Category | null>(null)
   const { user } = useAuth()
+  const { t } = useI18n()
+  const insets = useSafeAreaInsets()
+  const { language } = useSettings()
 
   useEffect(() => {
     fetchTransactions()
@@ -56,7 +74,9 @@ export default function TransactionsScreen() {
 
   // Force refresh data when categories are updated
   const refreshData = useCallback(async () => {
+    setRefreshing(true)
     await Promise.all([fetchTransactions(), fetchCategories()])
+    setRefreshing(false)
   }, [])
 
   const fetchTransactions = async () => {
@@ -93,7 +113,7 @@ export default function TransactionsScreen() {
 
   const addTransaction = async () => {
     if (!amount || !description || !selectedCategory) {
-      Alert.alert('Error', 'Please fill in all fields')
+      Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_fields'))
       return
     }
 
@@ -115,32 +135,50 @@ export default function TransactionsScreen() {
       setAmount('')
       setDescription('')
       setSelectedCategory(null)
-      await fetchTransactions() // Ensure data is fresh
-      Alert.alert('Success', 'Transaction added successfully!')
+      await fetchTransactions()
+      Alert.alert(t('transactions.alert.success_title'), t('transactions.alert.success_message'))
     } catch (error) {
       console.error('Error adding transaction:', error)
-      Alert.alert('Error', 'Failed to add transaction')
+      Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_add'))
     }
   }
 
-  const renderTransaction = ({ item }: { item: Transaction }) => (
-    <View style={styles.transactionItem}>
-      <View style={[styles.categoryIcon, { backgroundColor: item.category.color + '20' }]}>
+  const renderTransaction = ({ item, index }: { item: Transaction, index: number }) => {
+    const currentDate = new Date(item.transaction_date)
+    const currentKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`
+    const prev = transactions[index - 1]
+    const showMonthHeader = index === 0 || (prev && (`${new Date(prev.transaction_date).getFullYear()}-${String(new Date(prev.transaction_date).getMonth()+1).padStart(2,'0')}` !== currentKey))
+    const monthTitle = new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric' }).format(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+    return (
+    <View>
+      {showMonthHeader && (
+        <View style={styles.sectionHeader}><Text style={styles.sectionHeaderText}>{monthTitle}</Text></View>
+      )}
+      <TouchableOpacity style={styles.transactionItem} onPress={() => {
+        setEditTx(item)
+        setEditAmount(String(item.amount))
+        setEditDescription(item.description)
+        setEditType(item.type)
+        setEditCategory(categories.find(c => c.name === item.category?.name) || null)
+        setEditModalVisible(true)
+      }}>
+      <View style={[styles.categoryIcon, { backgroundColor: item.category.color + '20' }]}> 
         <Ionicons name={item.category.icon as any} size={20} color={item.category.color} />
       </View>
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionDescription}>{item.description}</Text>
-        <Text style={styles.transactionCategory}>{item.category.name}</Text>
-        <Text style={styles.transactionDate}>{new Date(item.transaction_date).toLocaleDateString()}</Text>
+        <Text style={styles.transactionMeta}>{item.category.name} • {new Date(item.transaction_date).toLocaleDateString()}</Text>
       </View>
       <Text style={[
         styles.transactionAmount,
         { color: item.type === 'income' ? '#50C878' : '#FF6B6B' }
       ]}>
-        {item.type === 'income' ? '+' : '-'}${item.amount}
+        {(item.type === 'income' ? '+' : '-') + formatCurrency(item.amount, language)}
       </Text>
+      </TouchableOpacity>
     </View>
-  )
+    )
+  }
 
   const renderCategory = ({ item }: { item: Category }) => (
     <TouchableOpacity
@@ -149,11 +187,17 @@ export default function TransactionsScreen() {
         selectedCategory?.id === item.id && styles.categoryItemSelected
       ]}
       onPress={() => {
-        setSelectedCategory(item)
+        if (categoryPickerTarget === 'add') {
+          setSelectedCategory(item)
+        } else if (categoryPickerTarget === 'edit') {
+          setEditCategory(item)
+        } else {
+          setFilterCategoryId(item.id)
+        }
         setCategoryModalVisible(false)
       }}
     >
-      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}>
+      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}> 
         <Ionicons name={item.icon as any} size={20} color={item.color} />
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
@@ -162,8 +206,8 @@ export default function TransactionsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Transactions</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.title}>{t('transactions.title')}</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
@@ -172,16 +216,46 @@ export default function TransactionsScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.filtersRow}>
+        <View style={styles.typeSelectorInline}>
+          {(['all','income','expense'] as const).map(ft => (
+            <TouchableOpacity
+              key={ft}
+              style={[styles.typeChip, filterType === ft && styles.typeChipActive]}
+              onPress={() => setFilterType(ft)}
+            >
+              <Text style={[styles.typeChipText, filterType === ft && styles.typeChipTextActive]}>
+                {ft === 'all' ? t('transactions.filters.type_all') : ft === 'income' ? t('transactions.filters.type_income') : t('transactions.filters.type_expense')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.categoryFilter} onPress={() => { setCategoryPickerTarget('filter'); setCategoryModalVisible(true) }}>
+          <Text style={styles.categoryFilterText}>{t('transactions.filters.category')}</Text>
+          <Ionicons name="chevron-down" size={16} color="#666" />
+        </TouchableOpacity>
+        {!!filterCategoryId && (
+          <TouchableOpacity style={styles.clearFilter} onPress={() => setFilterCategoryId(null)}>
+            <Text style={styles.clearFilterText}>{t('transactions.filters.clear')}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       <FlatList
-        data={transactions}
+        data={transactions.filter(t => {
+          if (filterType !== 'all' && t.type !== filterType) return false
+          if (filterCategoryId && (t as any).category?.id !== filterCategoryId) return false
+          return true
+        })}
         renderItem={renderTransaction}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshData} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No transactions yet</Text>
-            <Text style={styles.emptySubtext}>Add your first transaction to get started</Text>
+            <Text style={styles.emptyText}>{t('transactions.empty.title')}</Text>
+            <Text style={styles.emptySubtext}>{t('transactions.empty.subtitle')}</Text>
           </View>
         }
       />
@@ -196,7 +270,7 @@ export default function TransactionsScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Transaction</Text>
+              <Text style={styles.modalTitle}>{t('transactions.modal.title')}</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -217,7 +291,7 @@ export default function TransactionsScreen() {
                     styles.typeButtonText,
                     transactionType === 'income' && styles.typeButtonTextActive
                   ]}>
-                    Income
+                    {t('transactions.type.income')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -232,14 +306,14 @@ export default function TransactionsScreen() {
                     styles.typeButtonText,
                     transactionType === 'expense' && styles.typeButtonTextActive
                   ]}>
-                    Expense
+                    {t('transactions.type.expense')}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {/* Amount */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Amount</Text>
+                <Text style={styles.label}>{t('transactions.amount')}</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="0.00"
@@ -252,10 +326,10 @@ export default function TransactionsScreen() {
 
               {/* Description */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Description</Text>
+                <Text style={styles.label}>{t('transactions.description')}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="What did you spend on?"
+                  placeholder={t('transactions.description.placeholder')}
                   value={description}
                   onChangeText={setDescription}
                   placeholderTextColor="#999"
@@ -264,10 +338,10 @@ export default function TransactionsScreen() {
 
               {/* Category */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Category</Text>
+                <Text style={styles.label}>{t('transactions.category')}</Text>
                 <TouchableOpacity
                   style={styles.categorySelector}
-                  onPress={() => setCategoryModalVisible(true)}
+                  onPress={() => { setCategoryPickerTarget('add'); setCategoryModalVisible(true) }}
                 >
                   {selectedCategory ? (
                     <View style={styles.selectedCategory}>
@@ -277,7 +351,7 @@ export default function TransactionsScreen() {
                       <Text style={styles.selectedCategoryText}>{selectedCategory.name}</Text>
                     </View>
                   ) : (
-                    <Text style={styles.placeholderText}>Select a category</Text>
+                    <Text style={styles.placeholderText}>{t('transactions.category.select_placeholder')}</Text>
                   )}
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
@@ -285,24 +359,127 @@ export default function TransactionsScreen() {
 
               {/* Add Button */}
               <TouchableOpacity style={styles.addTransactionButton} onPress={addTransaction}>
-                <Text style={styles.addTransactionButtonText}>Add Transaction</Text>
+                <Text style={styles.addTransactionButtonText}>{t('transactions.add_button')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Category Selection Modal */}
       <Modal
-        visible={categoryModalVisible}
+        visible={editModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setCategoryModalVisible(false)}
+        onRequestClose={() => setEditModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
+              <Text style={styles.modalTitle}>{t('transactions.modal.edit_title')}</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.typeSelector}>
+                <TouchableOpacity
+                  style={[styles.typeButton, editType === 'income' && styles.typeButtonActive, { borderColor: '#50C878' }]}
+                  onPress={() => setEditType('income')}
+                >
+                  <Text style={[styles.typeButtonText, editType === 'income' && styles.typeButtonTextActive]}>
+                    {t('transactions.type.income')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.typeButton, editType === 'expense' && styles.typeButtonActive, { borderColor: '#FF6B6B' }]}
+                  onPress={() => setEditType('expense')}
+                >
+                  <Text style={[styles.typeButtonText, editType === 'expense' && styles.typeButtonTextActive]}>
+                    {t('transactions.type.expense')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.amount')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  value={editAmount}
+                  onChangeText={setEditAmount}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.description')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('transactions.description.placeholder')}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.category')}</Text>
+                <TouchableOpacity style={styles.categorySelector} onPress={() => { setCategoryPickerTarget('edit'); setCategoryModalVisible(true) }}>
+                  {editCategory ? (
+                    <View style={styles.selectedCategory}>
+                      <View style={[styles.categoryIcon, { backgroundColor: editCategory.color + '20' }]}> 
+                        <Ionicons name={editCategory.icon as any} size={16} color={editCategory.color} />
+                      </View>
+                      <Text style={styles.selectedCategoryText}>{editCategory.name}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.placeholderText}>{t('transactions.category.select_placeholder')}</Text>
+                  )}
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.addTransactionButton} onPress={async () => {
+                if (!editTx) return
+                try {
+                  const { error } = await supabase
+                    .from('transactions')
+                    .update({
+                      amount: parseFloat(editAmount),
+                      description: editDescription,
+                      type: editType,
+                      category_id: editCategory?.id,
+                    })
+                    .eq('id', editTx.id)
+                  if (error) throw error
+                  setEditModalVisible(false)
+                  setEditTx(null)
+                  await fetchTransactions()
+                  Alert.alert(t('transactions.alert.success_title'), t('transactions.alert.success_edit'))
+                } catch (e) {
+                  Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_edit'))
+                }
+              }}>
+                <Text style={styles.addTransactionButtonText}>{t('transactions.modal.edit_title')}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+  {/* Category Selection Modal */}
+  <Modal
+    visible={categoryModalVisible}
+    transparent
+    animationType="slide"
+    onRequestClose={() => setCategoryModalVisible(false)}
+  >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('transactions.category.modal.title')}</Text>
               <TouchableOpacity onPress={() => setCategoryModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -322,7 +499,7 @@ export default function TransactionsScreen() {
                   }}
                 >
                   <Ionicons name="add-circle" size={24} color="#4A90E2" />
-                  <Text style={styles.createCategoryText}>Create New Category</Text>
+                  <Text style={styles.createCategoryText}>{t('transactions.category.create_new')}</Text>
                 </TouchableOpacity>
               )}
             />
@@ -378,7 +555,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: {
@@ -401,22 +578,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transactionDescription: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
   },
-  transactionCategory: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  transactionDate: {
+  transactionMeta: {
     fontSize: 12,
-    color: '#999',
+    color: '#666',
   },
   transactionAmount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   emptyContainer: {
@@ -543,6 +715,72 @@ const styles = StyleSheet.create({
   addTransactionButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  typeSelectorInline: {
+    flexDirection: 'row',
+    gap: 8,
+    flex: 1,
+  },
+  typeChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+  },
+  typeChipActive: {
+    borderColor: '#4A90E2',
+    backgroundColor: '#EAF2FD',
+  },
+  typeChipText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  typeChipTextActive: {
+    color: '#4A90E2',
+  },
+  categoryFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+  },
+  categoryFilterText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  clearFilter: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  clearFilterText: {
+    color: '#4A90E2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    color: '#666',
     fontWeight: '600',
   },
   categoryList: {

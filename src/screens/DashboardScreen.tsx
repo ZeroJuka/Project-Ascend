@@ -6,12 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
 
 interface FinancialStats {
   totalIncome: number
@@ -56,6 +61,19 @@ export default function DashboardScreen() {
   const [timeFilter, setTimeFilter] = useState<'week' | 'month' | 'year'>('month')
   const { user } = useAuth()
   const isFocused = useIsFocused()
+  const { t } = useI18n()
+  const insets = useSafeAreaInsets()
+  const [refreshing, setRefreshing] = useState(false)
+  const { language } = useSettings()
+
+  const safeFormatCurrency = (amount: number) => {
+    try {
+      return formatCurrency(amount, language)
+    } catch {
+      const prefix = language === 'pt-BR' ? 'R$ ' : '$'
+      return `${prefix}${Number(amount || 0).toFixed(2)}`
+    }
+  }
 
   useEffect(() => {
     fetchDashboardData()
@@ -217,7 +235,7 @@ export default function DashboardScreen() {
         <Ionicons name={icon} size={20} color="#fff" />
         <Text style={styles.statTitle}>{title}</Text>
       </View>
-      <Text style={styles.statAmount}>${amount.toLocaleString()}</Text>
+      <Text style={styles.statAmount}>{safeFormatCurrency(amount)}</Text>
     </LinearGradient>
   )
 
@@ -228,7 +246,7 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.categoryInfo}>
         <Text style={styles.categoryName}>{item.category}</Text>
-        <Text style={styles.categoryAmount}>${item.amount.toFixed(2)}</Text>
+        <Text style={styles.categoryAmount}>{safeFormatCurrency(item.amount)}</Text>
       </View>
       <View style={styles.categoryBar}>
         <View style={[styles.categoryBarFill, { backgroundColor: item.color, width: '60%' }]} />
@@ -245,10 +263,10 @@ export default function DashboardScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchDashboardData(); setRefreshing(false) }} />}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Financial Dashboard</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.headerTitle}>{t('dashboard.header.title')}</Text>
         <View style={styles.filterContainer}>
           {['week', 'month', 'year'].map((filter) => (
             <TouchableOpacity
@@ -263,7 +281,7 @@ export default function DashboardScreen() {
                 styles.filterText,
                 timeFilter === filter && styles.filterTextActive
               ]}>
-                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                {filter === 'week' ? t('dashboard.filter.week') : filter === 'month' ? t('dashboard.filter.month') : t('dashboard.filter.year')}
               </Text>
             </TouchableOpacity>
           ))}
@@ -272,22 +290,22 @@ export default function DashboardScreen() {
 
       {/* Overview Cards */}
       <View style={styles.overviewSection}>
-        <Text style={styles.sectionTitle}>Overview</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.overview.title')}</Text>
         <View style={styles.statsGrid}>
           <StatCard
-            title="Total Balance"
+            title={t('dashboard.stat.total_balance')}
             amount={stats.netBalance}
             color="#4A90E2"
             icon="wallet"
           />
           <StatCard
-            title="Total Income"
+            title={t('dashboard.stat.total_income')}
             amount={stats.totalIncome}
             color="#50C878"
             icon="trending-up"
           />
           <StatCard
-            title="Total Expenses"
+            title={t('dashboard.stat.total_expenses')}
             amount={stats.totalExpenses}
             color="#FF6B6B"
             icon="trending-down"
@@ -298,33 +316,33 @@ export default function DashboardScreen() {
       {/* Time-based Stats */}
       <View style={styles.timeStatsSection}>
         <Text style={styles.sectionTitle}>
-          {timeFilter === 'week' ? 'This Week' : timeFilter === 'month' ? 'This Month' : 'This Year'}
+          {timeFilter === 'week' ? t('dashboard.time.title.week') : timeFilter === 'month' ? t('dashboard.time.title.month') : t('dashboard.time.title.year')}
         </Text>
         <View style={styles.timeStatsContainer}>
           <View style={styles.timeStat}>
-            <Text style={styles.timeStatLabel}>Income</Text>
+            <Text style={styles.timeStatLabel}>{t('dashboard.time.income')}</Text>
             <Text style={[styles.timeStatAmount, { color: '#50C878' }]}>
-              ${
-                timeFilter === 'week' ? stats.weeklyIncome.toLocaleString() :
-                timeFilter === 'month' ? stats.monthlyIncome.toLocaleString() :
-                stats.totalIncome.toLocaleString()
-              }
+              {safeFormatCurrency(
+                timeFilter === 'week' ? stats.weeklyIncome :
+                timeFilter === 'month' ? stats.monthlyIncome :
+                stats.totalIncome
+              )}
             </Text>
           </View>
           <View style={styles.timeStatDivider} />
           <View style={styles.timeStat}>
-            <Text style={styles.timeStatLabel}>Expenses</Text>
+            <Text style={styles.timeStatLabel}>{t('dashboard.time.expenses')}</Text>
             <Text style={[styles.timeStatAmount, { color: '#FF6B6B' }]}>
-              ${
-                timeFilter === 'week' ? stats.weeklyExpenses.toLocaleString() :
-                timeFilter === 'month' ? stats.monthlyExpenses.toLocaleString() :
-                stats.totalExpenses.toLocaleString()
-              }
+              {safeFormatCurrency(
+                timeFilter === 'week' ? stats.weeklyExpenses :
+                timeFilter === 'month' ? stats.monthlyExpenses :
+                stats.totalExpenses
+              )}
             </Text>
           </View>
           <View style={styles.timeStatDivider} />
           <View style={styles.timeStat}>
-            <Text style={styles.timeStatLabel}>Net</Text>
+            <Text style={styles.timeStatLabel}>{t('dashboard.time.net')}</Text>
             <Text style={[styles.timeStatAmount, { 
               color: (
                 timeFilter === 'week' ? stats.weeklyNet :
@@ -332,13 +350,13 @@ export default function DashboardScreen() {
                 stats.netBalance
               ) >= 0 ? '#50C878' : '#FF6B6B'
             }]}>
-              ${
+              {safeFormatCurrency(
                 (
                   timeFilter === 'week' ? stats.weeklyNet :
                   timeFilter === 'month' ? stats.monthlyNet :
                   stats.netBalance
-                ).toLocaleString()
-              }
+                )
+              )}
             </Text>
           </View>
         </View>
@@ -346,7 +364,7 @@ export default function DashboardScreen() {
 
       {/* Category Spending */}
       <View style={styles.categorySection}>
-        <Text style={styles.sectionTitle}>Spending by Category</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.category.title')}</Text>
         {categorySpending.length > 0 ? (
           <View style={styles.categoryContainer}>
             {categorySpending.map((item, index) => (
@@ -356,21 +374,21 @@ export default function DashboardScreen() {
         ) : (
           <View style={styles.emptyContainer}>
             <Ionicons name="pie-chart-outline" size={48} color="#ccc" />
-            <Text style={styles.emptyText}>No spending data available</Text>
+            <Text style={styles.emptyText}>{t('dashboard.empty.spending')}</Text>
           </View>
         )}
       </View>
 
       {/* Quick Insights */}
       <View style={styles.insightsSection}>
-        <Text style={styles.sectionTitle}>Quick Insights</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.insights.title')}</Text>
         <View style={styles.insightsContainer}>
           <View style={styles.insightItem}>
             <Ionicons name="trending-up" size={24} color="#50C878" />
             <Text style={styles.insightText}>
               {stats.monthlyIncome > stats.monthlyExpenses 
-                ? "You're saving money this month!" 
-                : "Consider reducing expenses this month"
+                ? t('dashboard.insights.saving_positive') 
+                : t('dashboard.insights.saving_negative')
               }
             </Text>
           </View>
@@ -378,8 +396,8 @@ export default function DashboardScreen() {
             <Ionicons name="wallet" size={24} color="#4A90E2" />
             <Text style={styles.insightText}>
               {stats.netBalance >= 0 
-                ? "Your overall balance is positive" 
-                : "Focus on increasing income or reducing expenses"
+                ? t('dashboard.insights.balance_positive') 
+                : t('dashboard.insights.balance_negative')
               }
             </Text>
           </View>

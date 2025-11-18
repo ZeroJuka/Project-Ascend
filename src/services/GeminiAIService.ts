@@ -12,9 +12,11 @@ export interface FinancialInsight {
 
 export class GeminiAIService {
   private userId: string
+  private language: 'en' | 'pt-BR'
 
-  constructor(userId: string) {
+  constructor(userId: string, language: 'en' | 'pt-BR' = 'en') {
     this.userId = userId
+    this.language = language
   }
 
   async generateFinancialInsight(message: string): Promise<FinancialInsight> {
@@ -28,7 +30,7 @@ export class GeminiAIService {
       }
 
       const financialData = await this.getUserFinancialData()
-      const recentHistory = await this.getRecentConversation(5)
+      const recentHistory = await this.getRecentConversation(12)
       const systemPrompt = this.buildFinancialPrompt(financialData, recentHistory)
       let response = await this.makeAPICall(systemPrompt, message)
       
@@ -36,7 +38,6 @@ export class GeminiAIService {
         console.log('Primary model unavailable, trying first fallback...')
         response = await this.makeAPICallWithFallback(systemPrompt, message)
         
-        // If first fallback also fails, try second fallback
         if (response.status === 503 || response.status === 404) {
           console.log('First fallback unavailable, trying second fallback...')
           response = await this.makeAPICallWithSecondFallback(systemPrompt, message)
@@ -47,13 +48,11 @@ export class GeminiAIService {
         const errorText = await response.text()
         console.error('AI API error response:', errorText)
         
-        // Return a helpful fallback response instead of error
         return this.getFallbackResponse(message, financialData)
       }
 
       const result = await response.json()
       
-      // Check if response has expected structure
       if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts || !result.candidates[0].content.parts[0]) {
         console.error('Unexpected AI response structure:', result)
         return this.getFallbackResponse(message, financialData)
@@ -102,7 +101,6 @@ export class GeminiAIService {
   }
 
   private async makeAPICallWithFallback(systemPrompt: string, message: string): Promise<Response> {
-    // Try with gemini-1.5-flash-latest as fallback
     const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
     
     return fetch(`${fallbackUrl}?key=${GEMINI_API_KEY}`, {
@@ -110,6 +108,7 @@ export class GeminiAIService {
       headers: {
         'Content-Type': 'application/json',
       },
+
       body: JSON.stringify({
         contents: [{
           parts: [{
@@ -120,14 +119,13 @@ export class GeminiAIService {
           temperature: 0.5,
           topK: 1,
           topP: 1,
-          maxOutputTokens: 1024, // Reduced tokens for faster response
+          maxOutputTokens: 1024, 
         },
       }),
     })
   }
 
   private async makeAPICallWithSecondFallback(systemPrompt: string, message: string): Promise<Response> {
-    // Try with gemini-pro as final fallback (most stable)
     const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
     
     return fetch(`${fallbackUrl}?key=${GEMINI_API_KEY}`, {
@@ -154,34 +152,46 @@ export class GeminiAIService {
   private getFallbackResponse(message: string, financialData: any): FinancialInsight {
     // Simple keyword-based responses when AI is overloaded
     const lowerMessage = message.toLowerCase()
+    const isPT = this.language === 'pt-BR'
+    const locale = isPT ? 'pt-BR' : 'en-US'
+    const currency = isPT ? 'BRL' : 'USD'
+    const fmt = (n: number) => new Intl.NumberFormat(locale, { style: 'currency', currency }).format(n)
     
     if (lowerMessage.includes('spend') || lowerMessage.includes('expense')) {
       const recentTransactions = financialData.transactions.slice(-5)
       const totalSpent = recentTransactions.reduce((sum: number, t: any) => sum + parseFloat(t.amount || 0), 0)
       return {
         type: 'insight',
-        content: `I can see you've had ${recentTransactions.length} recent transactions totaling $${totalSpent.toFixed(2)}. While my advanced AI is currently busy, I'd be happy to help you track your spending patterns or create budgets. Would you like me to show you your recent transactions?`
+        content: isPT
+          ? `Vejo que você teve ${recentTransactions.length} transações recentes totalizando ${fmt(totalSpent)}. Posso ajudar a acompanhar seus gastos ou criar orçamentos. Quer que eu mostre suas transações recentes?`
+          : `I can see you've had ${recentTransactions.length} recent transactions totaling ${fmt(totalSpent)}. While my advanced AI is currently busy, I'd be happy to help you track your spending patterns or create budgets. Would you like me to show you your recent transactions?`
       }
     }
     
     if (lowerMessage.includes('budget') || lowerMessage.includes('save')) {
       return {
         type: 'insight',
-        content: `I notice you're interested in budgeting. You currently have ${financialData.goals.length} active financial goals. While my AI is experiencing high demand, I can help you set up new savings goals or track your progress. What specific financial goal would you like to work on?`
+        content: isPT
+          ? `Percebo interesse em orçamento. Você tem ${financialData.goals.length} metas financeiras ativas. Posso ajudar a criar novas metas de economia ou acompanhar seu progresso. Qual meta deseja trabalhar?`
+          : `I notice you're interested in budgeting. You currently have ${financialData.goals.length} active financial goals. While my AI is experiencing high demand, I can help you set up new savings goals or track your progress. What specific financial goal would you like to work on?`
       }
     }
     
     if (lowerMessage.includes('transaction') || lowerMessage.includes('add')) {
       return {
         type: 'insight',
-        content: `I can help you track new transactions! You have ${financialData.categories.length} spending categories available. While my AI is currently overloaded, feel free to tell me about any transactions you'd like to record, and I can help you categorize them properly.`
+        content: isPT
+          ? `Posso ajudar a registrar novas transações! Você tem ${financialData.categories.length} categorias disponíveis. Diga quais transações deseja registrar e posso ajudar a categorizá-las corretamente.`
+          : `I can help you track new transactions! You have ${financialData.categories.length} spending categories available. While my AI is currently overloaded, feel free to tell me about any transactions you'd like to record, and I can help you categorize them properly.`
       }
     }
     
     // Default fallback
     return {
       type: 'insight',
-      content: `I'm currently experiencing high demand, but I'm here to help with your finances! You have ${financialData.transactions.length} transactions recorded and ${financialData.goals.length} active goals. Feel free to ask me about your spending, create new transactions, or set financial goals. What would you like to work on?`
+      content: isPT
+        ? `Estou com alta demanda no momento, mas posso ajudar com suas finanças! Você tem ${financialData.transactions.length} transações registradas e ${financialData.goals.length} metas ativas. Pergunte sobre seus gastos, crie novas transações ou defina metas. O que deseja fazer?`
+        : `I'm currently experiencing high demand, but I'm here to help with your finances! You have ${financialData.transactions.length} transactions recorded and ${financialData.goals.length} active goals. Feel free to ask me about your spending, create new transactions, or set financial goals. What would you like to work on?`
     }
   }
 
@@ -208,7 +218,11 @@ export class GeminiAIService {
 
   private buildFinancialPrompt(financialData: any, history: { sender: 'user'|'ai', message: string }[]): string {
     const historyText = history.map(h => `${h.sender.toUpperCase()}: ${h.message}`).join('\n')
-    return `You are ASCEND, a helpful financial assistant. You have access to the user's financial data and can help them manage their finances, create transactions, set goals, and provide insights.
+    const lang = this.language === 'pt-BR' ? 'Português (Brasil)' : 'English'
+    return `You are ASCEND, a focused financial assistant. You must help the user manage finances, create transactions, set goals, and register bills succinctly.
+
+Preferred language: ${lang}
+You must write all responses in the preferred language.
 
 User's Financial Data:
 - Total Transactions: ${financialData.transactions.length}
@@ -216,22 +230,33 @@ User's Financial Data:
 - Active Goals: ${financialData.goals.length}
 - Upcoming Bills: ${financialData.bills.filter((b: any) => !b.is_paid).length}
 
-Conversation History (last 5 messages):
+Conversation History (recent messages):
 ${historyText}
 
-Your capabilities:
-1. Answer questions about their financial data
-2. Create transactions when requested
-3. Create goals when requested
-4. Create bills when requested
-4. Provide financial insights and advice
-5. Help track spending and budgeting
+Capabilities:
+1. Answer questions about financial data and trends.
+2. Create transactions when requested.
+3. Create goals when requested.
+4. Create bills when requested.
+5. Provide financial insights and budgeting help.
 
-Response format requirements:
-- If user asks to create a transaction, bill, or goal: respond with EXACTLY a valid JSON object and nothing else.
+Output rules:
+- When the user asks to register/create anything, output ONLY a single valid JSON object. No explanations, no markdown, no extra text.
 - JSON shape: { "action": "create_transaction|create_bill|create_goal", "data": { ... } }
-- Use ISO date strings. Use strings for category names. Do not include trailing commas or comments.
-- If not creating anything, respond with plain helpful text.
+- Use ISO 8601 date strings. Use category names as strings. Avoid trailing commas and comments.
+- If the user is not asking to create anything, respond with clear helpful text.
+
+Examples:
+- Transaction:
+{"action":"create_transaction","data":{"amount":49.99,"description":"Groceries","type":"expense","category":"Food","transaction_date":"${new Date().toISOString().split('T')[0]}"}}
+- Goal:
+{"action":"create_goal","data":{"title":"Emergency Fund","target_amount":1000,"goal_type":"savings","time_period":"monthly"}}
+- Bill:
+{"action":"create_bill","data":{"title":"Internet","amount":89.90,"due_date":"${new Date().toISOString().split('T')[0]}","frequency":"monthly","category":"Utilities"}}
+
+Strictness:
+- If asked to register, limit output to the creation command JSON only.
+- Do not include greetings, prefaces, or any extra fields beyond what is necessary.
 
 Current date: ${new Date().toISOString().split('T')[0]}`
   }
@@ -248,21 +273,21 @@ Current date: ${new Date().toISOString().split('T')[0]}`
         if (parsed.action === 'create_transaction') {
           return {
             type: 'transaction',
-            content: 'Registration Confirmation: Please review the transaction details.',
+            content: this.language === 'pt-BR' ? 'Confirmação de Registro: Revise os detalhes da transação.' : 'Registration Confirmation: Please review the transaction details.',
             data: parsed.data
           }
         }
         if (parsed.action === 'create_goal') {
           return {
             type: 'goal',
-            content: 'Registration Confirmation: Please review the goal details.',
+            content: this.language === 'pt-BR' ? 'Confirmação de Registro: Revise os detalhes da meta.' : 'Registration Confirmation: Please review the goal details.',
             data: parsed.data
           }
         }
         if (parsed.action === 'create_bill') {
           return {
             type: 'bill',
-            content: 'Registration Confirmation: Please review the bill details.',
+            content: this.language === 'pt-BR' ? 'Confirmação de Registro: Revise os detalhes da conta.' : 'Registration Confirmation: Please review the bill details.',
             data: parsed.data
           }
         }
@@ -350,10 +375,11 @@ Current date: ${new Date().toISOString().split('T')[0]}`
   private async getRecentConversation(limit: number) {
     const { data } = await supabase
       .from('chat_messages')
-      .select('conversation')
+      .select('conversation, updated_at')
       .eq('user_id', this.userId)
-      .single()
-    const conv = (data?.conversation || []) as { sender: 'user'|'ai', message: string }[]
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    const conv = ((data?.[0]?.conversation) || []) as { sender: 'user'|'ai', message: string }[]
     return conv.slice(Math.max(0, conv.length - limit))
   }
 }

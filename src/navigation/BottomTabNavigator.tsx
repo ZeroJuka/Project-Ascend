@@ -10,6 +10,7 @@ import TransactionsScreen from '../screens/TransactionsScreen'
 import GoalsScreen from '../screens/GoalsScreen'
 import ChatScreen from '../screens/ChatScreen'
 import DashboardScreen from '../screens/DashboardScreen'
+import { useI18n } from '../contexts/I18nContext'
 
 const Tab = createBottomTabNavigator()
 
@@ -141,7 +142,7 @@ function AIButton() {
       style={[
         styles.aiButton,
         isRecording && styles.aiButtonRecording,
-        { bottom: 20 + insets.bottom }
+        { bottom: 5 + insets.bottom }
       ]}
       onPress={handlePress}
       onLongPress={handleLongPress}
@@ -162,6 +163,7 @@ function AIButton() {
 
 export default function BottomTabNavigator() {
   const insets = useSafeAreaInsets()
+  const { t } = useI18n()
   
   return (
     <Tab.Navigator
@@ -169,9 +171,9 @@ export default function BottomTabNavigator() {
         tabBarStyle: {
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           borderTopWidth: 0,
-          height: 70 + insets.bottom,
+          height: 60 + insets.bottom,
           paddingBottom: insets.bottom + 10,
-          paddingTop: 10,
+          paddingTop: 5,
           borderRadius: 25,
           marginHorizontal: 16,
           marginBottom: 16,
@@ -204,6 +206,7 @@ export default function BottomTabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
+          tabBarLabel: t('tabs.home'),
         }}
       />
       <Tab.Screen
@@ -213,11 +216,12 @@ export default function BottomTabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="swap-horizontal" size={size} color={color} />
           ),
+          tabBarLabel: t('tabs.transactions'),
         }}
       />
       <Tab.Screen
         name="AI"
-        component={View} // Dummy component since we handle this manually
+        component={View}
         options={{
           tabBarIcon: () => <AIButton />,
           tabBarLabel: () => null,
@@ -225,7 +229,6 @@ export default function BottomTabNavigator() {
         listeners={({ navigation }) => ({
           tabPress: (e) => {
             e.preventDefault()
-            // Don't navigate here - AIButton handles its own navigation
           },
         })}
       />
@@ -236,6 +239,7 @@ export default function BottomTabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="trophy" size={size} color={color} />
           ),
+          tabBarLabel: t('tabs.goals'),
         }}
       />
       <Tab.Screen
@@ -245,6 +249,7 @@ export default function BottomTabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart" size={size} color={color} />
           ),
+          tabBarLabel: t('tabs.dashboard'),
         }}
       />
     </Tab.Navigator>
