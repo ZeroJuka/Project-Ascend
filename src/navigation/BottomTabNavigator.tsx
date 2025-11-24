@@ -1,7 +1,7 @@
 import React from 'react'
 import { TouchableOpacity, StyleSheet, View, Text, Platform, Dimensions, Alert } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, NavigationProp, ParamListBase } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { voiceTranscriptionService } from '../services/VoiceTranscriptionService'
@@ -15,10 +15,10 @@ import { useI18n } from '../contexts/I18nContext'
 const Tab = createBottomTabNavigator()
 
 function AIButton() {
-  const navigation = useNavigation()
+  const navigation = useNavigation<NavigationProp<ParamListBase>>()
   const [isRecording, setIsRecording] = React.useState(false)
   const insets = useSafeAreaInsets()
-  const [recordingTimer, setRecordingTimer] = React.useState<NodeJS.Timeout | null>(null)
+  const [recordingTimer, setRecordingTimer] = React.useState<number | null>(null)
 
   // Cleanup on unmount
   React.useEffect(() => {

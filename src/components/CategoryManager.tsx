@@ -210,7 +210,8 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
 
                 {/* Create Button */}
                 <TouchableOpacity
-                  style={[styles.createButton, { backgroundColor: selectedColor }]}n                  onPress={handleCreateCategory}
+                  style={[styles.createButton, { backgroundColor: selectedColor }]}
+                  onPress={handleCreateCategory}
                   disabled={isCreating}
                 >
                   <Text style={styles.createButtonText}>

@@ -9,7 +9,6 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
-.github/workflows/*.yml
 
 # macOS
 .DS_Store
