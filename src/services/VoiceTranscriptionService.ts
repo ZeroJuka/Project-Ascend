@@ -1,13 +1,17 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import { Audio } from 'expo-av'
 import Constants from 'expo-constants'
 
 const HUGGINGFACE_API_KEY = Constants.expoConfig?.extra?.HUGGINGFACE_API_KEY
 const WHISPER_MODEL_URL = Constants.expoConfig?.extra?.WHISPER_MODEL_URL || 'https://router.huggingface.co/hf-inference'
 const HF_ROUTER_BASE = 'https://router.huggingface.co/hf-inference'
 
+async function loadAudio() {
+  const mod: any = await import('expo-av')
+  return mod.Audio
+}
+
 export class VoiceTranscriptionService {
-  private recording: Audio.Recording | null = null
+  private recording: any | null = null
   private isRecording = false
 
   constructor() {
@@ -17,6 +21,7 @@ export class VoiceTranscriptionService {
 
   private async globalCleanup(): Promise<void> {
     try {
+      const Audio = await loadAudio()
       // Reset audio mode to default
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -31,6 +36,7 @@ export class VoiceTranscriptionService {
   }
 
   async requestPermissions() {
+    const Audio = await loadAudio()
     const { granted } = await Audio.requestPermissionsAsync()
     
     if (!granted) {
@@ -39,6 +45,7 @@ export class VoiceTranscriptionService {
     
     // Configure audio mode with minimal settings for better compatibility
     try {
+      const Audio = await loadAudio()
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -50,6 +57,7 @@ export class VoiceTranscriptionService {
   }
 
   async startRecording(maxRetries = 2) {
+    const Audio = await loadAudio()
     
     await this.forceStopRecording()
     await new Promise(resolve => setTimeout(resolve, 1000))

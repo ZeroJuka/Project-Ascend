@@ -19,6 +19,8 @@ import { useIsFocused } from '@react-navigation/native'
 import GoalManager from '../components/GoalManager'
 import { useI18n } from '../contexts/I18nContext'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
 
 interface Goal {
   id: string
@@ -63,6 +65,16 @@ export default function GoalsScreen() {
   const { t } = useI18n()
   const insets = useSafeAreaInsets()
   const [refreshing, setRefreshing] = useState(false)
+  const { language } = useSettings()
+
+  const safeFormatCurrency = (amount: number) => {
+    try {
+      return formatCurrency(amount, language)
+    } catch {
+      const prefix = language === 'pt-BR' ? 'R$ ' : '$'
+      return `${prefix}${Number(amount || 0).toFixed(2)}`
+    }
+  }
 
   // Form states
   const [title, setTitle] = useState('')
@@ -88,6 +100,12 @@ export default function GoalsScreen() {
       fetchBills()
     }
   }, [isFocused])
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([fetchGoals(), fetchBills()])
+    setRefreshing(false)
+  }
 
   const fetchGoals = async () => {
     try {
@@ -296,7 +314,7 @@ export default function GoalsScreen() {
       
       <View style={styles.goalStats}>
         <Text style={styles.goalAmount}>
-          {formatCurrency(item.current_amount, language)} / {formatCurrency(item.target_amount, language)}
+          {safeFormatCurrency(item.current_amount)} / {safeFormatCurrency(item.target_amount)}
         </Text>
       </View>
     </View>
@@ -314,7 +332,7 @@ export default function GoalsScreen() {
             {t('bills.due_prefix')}{new Date(item.due_date).toLocaleDateString()} • {item.frequency}
           </Text>
         </View>
-        <Text style={styles.billAmount}>{formatCurrency(item.amount, language)}</Text>
+        <Text style={styles.billAmount}>{safeFormatCurrency(item.amount)}</Text>
       </View>
       
       <View style={styles.billActions}>
@@ -761,8 +779,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 })
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await Promise.all([fetchGoals(), fetchBills()])
-    setRefreshing(false)
-  }
