@@ -1,555 +1,820 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, Dimensions, Modal, TextInput, TouchableOpacity, Alert, ScrollView, SectionList } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import PageContainer from '../components/ui/PageContainer';
-import Chip from '../components/ui/Chip';
-import { colors, spacing, borderRadius, fontSize, gradients } from '../utils/theme';
-import { LineChart } from 'react-native-chart-kit';
-import { chartConfig } from '../components/ui/ChartWrapper';
-import { useTransactions } from '../hooks/useTransactions';
-import { transactionService } from '../lib/transactionService';
-import { categoryService } from '../lib/categoryService';
-import type { Category } from '../types/category';
-import type { Transaction, TransactionFormData } from '../types/transaction';
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
+  ScrollView,
+  RefreshControl,
+} from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
+import CategoryManager from '../components/CategoryManager'
+
+interface Transaction {
+  id: string
+  amount: number
+  description: string
+  transaction_date: string
+  type: 'income' | 'expense'
+  category: {
+    name: string
+    color: string
+    icon: string
+  }
+}
+
+interface Category {
+  id: string
+  name: string
+  color: string
+  icon: string
+  is_default: boolean
+}
 
 export default function TransactionsScreen() {
-  const { transactions, refresh } = useTransactions();
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editing, setEditing] = useState<Transaction | null>(null);
-  const [form, setForm] = useState<TransactionFormData>({ description: '', amount: 0, type: 'expense', category: 'Geral', date: new Date().toISOString() });
-  const [accountsOpen, setAccountsOpen] = useState(true);
-  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [catModalVisible, setCatModalVisible] = useState(false);
-  const [newCat, setNewCat] = useState<{ name: string; icon: string; color: string }>({ name: '', icon: 'pricetag-outline', color: '#64748B' });
-  const iconOptions = [
-    'wallet-outline', 'pricetag-outline', 'fast-food-outline', 'car-outline', 'home-outline', 'game-controller-outline',
-    'medical-outline', 'briefcase-outline', 'airplane-outline', 'school-outline', 'fitness-outline', 'plane-outline',
-    'book-outline', 'paw-outline', 'cafe-outline', 'shirt-outline', 'gift-outline', 'trending-up-outline', 'construct-outline',
-    'brush-outline', 'color-palette-outline'
-  ];
-  const colorOptions = 
-    ['#10B981', '#EF4444', '#3B82F6', '#F59E0B', '#8B5CF6', '#14B8A6', '#64748B', '#22C55E', 
-     '#06B6D4', '#F472B6', '#A855F7', '#F43F5E', '#EAB308', '#94A3B8'];
-  const [catEditing, setCatEditing] = useState<Category | null>(null);
-  const width = Dimensions.get('window').width - 32;
-  useEffect(() => { refresh(); }, []);
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [modalVisible, setModalVisible] = useState(false)
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false)
+  const [categoryManagerVisible, setCategoryManagerVisible] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense')
+  const [refreshing, setRefreshing] = useState(false)
+  const [categoryPickerTarget, setCategoryPickerTarget] = useState<'add' | 'edit' | 'filter'>('add')
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
+  const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null)
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [editTx, setEditTx] = useState<Transaction | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editType, setEditType] = useState<'income' | 'expense'>('expense')
+  const [editCategory, setEditCategory] = useState<Category | null>(null)
+  const { user } = useAuth()
+  const { t } = useI18n()
+  const insets = useSafeAreaInsets()
+  const { language } = useSettings()
 
   useEffect(() => {
-    (async () => {
-      try {
-        const cats: Category[] = await categoryService.getCategories();
-        const map: Record<string, string> = {};
-        cats.forEach((c) => {
-          if (c.id) map[c.id] = c.name;
-          if (c.category_key) map[c.category_key as string] = c.name;
-          map[c.name] = c.name;
-        });
-        setCategoryMap(map);
-        setCategories(cats);
-      } catch (e) {
-        console.warn('Falha ao carregar categorias', e);
-      }
-    })();
-  }, []);
+    fetchTransactions()
+    fetchCategories()
+  }, [])
 
-  const currency = (n: number) => `R$ ${(n || 0).toLocaleString('pt-BR')}`;
-  const totalIncome = transactions.reduce((sum, t) => sum + (t.type === 'income' ? Math.abs(t.amount) : 0), 0);
-  const totalExpense = transactions.reduce((sum, t) => sum + (t.type === 'expense' ? Math.abs(t.amount) : 0), 0);
-  const currentMonthLabel = new Date().toLocaleString('pt-BR', { month: 'short' });
+  // Force refresh data when categories are updated
+  const refreshData = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([fetchTransactions(), fetchCategories()])
+    setRefreshing(false)
+  }, [])
 
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
-  const labels = months.map((d) => d.toLocaleString('pt-BR', { month: 'short' }));
-  const incomeSeries = months.map((m) =>
-    transactions.reduce((sum, t) => {
-      const dt = new Date(t.date);
-      const sameMonth = dt.getMonth() === m.getMonth() && dt.getFullYear() === m.getFullYear();
-      return sum + (sameMonth && t.type === 'income' ? Math.abs(t.amount) : 0);
-    }, 0)
-  );
-  const expenseSeries = months.map((m) =>
-    transactions.reduce((sum, t) => {
-      const dt = new Date(t.date);
-      const sameMonth = dt.getMonth() === m.getMonth() && dt.getFullYear() === m.getFullYear();
-      return sum + (sameMonth && t.type === 'expense' ? Math.abs(t.amount) : 0);
-    }, 0)
-  );
-
-  const openAdd = () => {
-    setEditing(null);
-    setForm({ description: '', amount: 0, type: 'expense', category: 'Geral', date: new Date().toISOString() });
-    setModalVisible(true);
-  };
-
-  const openEdit = (t: Transaction) => {
-    setEditing(t);
-    setForm({ description: t.description, amount: t.amount, type: t.type, category: t.category, date: t.date });
-    setModalVisible(true);
-  };
-
-  const validate = (): string | null => {
-    if (!form.description.trim()) return 'Descrição é obrigatória';
-    if (!form.category.trim()) return 'Categoria é obrigatória';
-    if (!['income','expense'].includes(form.type)) return 'Tipo inválido';
-    if (isNaN(form.amount) || form.amount === 0) return 'Valor deve ser diferente de zero';
-    return null;
-  };
-
-  const save = async () => {
-    const err = validate();
-    if (err) {
-      Alert.alert('Validação', err);
-      return;
-    }
+  const fetchTransactions = async () => {
     try {
-      if (editing) {
-        await transactionService.updateTransaction(editing.id, form);
-      } else {
-        await transactionService.addTransaction(form);
-      }
-      setModalVisible(false);
-      await refresh();
-    } catch (e) {
-      Alert.alert('Erro', (e as Error).message);
-    }
-  };
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          category:categories(*)
+        `)
+        .eq('user_id', user?.id)
+        .order('transaction_date', { ascending: false })
 
-  const confirmDelete = (t: Transaction) => {
-    Alert.alert('Excluir transação', 'Tem certeza que deseja excluir?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: async () => {
-        try { await transactionService.deleteTransaction(t.id); await refresh(); } catch (e) { Alert.alert('Erro', (e as Error).message); }
+      if (error) throw error
+      setTransactions(data || [])
+    } catch (error) {
+      console.error('Error fetching transactions:', error)
+    }
+  }
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .or(`user_id.eq.${user?.id},is_default.eq.true`)
+
+      if (error) throw error
+      setCategories(data || [])
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+    }
+  }
+
+  const addTransaction = async () => {
+    if (!amount || !description || !selectedCategory) {
+      Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_fields'))
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: user?.id,
+          category_id: selectedCategory.id,
+          amount: parseFloat(amount),
+          description,
+          type: transactionType,
+          transaction_date: new Date().toISOString().split('T')[0],
+        })
+
+      if (error) throw error
+
+      setModalVisible(false)
+      setAmount('')
+      setDescription('')
+      setSelectedCategory(null)
+      await fetchTransactions()
+      Alert.alert(t('transactions.alert.success_title'), t('transactions.alert.success_message'))
+    } catch (error) {
+      console.error('Error adding transaction:', error)
+      Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_add'))
+    }
+  }
+
+  const renderTransaction = ({ item, index }: { item: Transaction, index: number }) => {
+    const currentDate = new Date(item.transaction_date)
+    const currentKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`
+    const prev = transactions[index - 1]
+    const showMonthHeader = index === 0 || (prev && (`${new Date(prev.transaction_date).getFullYear()}-${String(new Date(prev.transaction_date).getMonth()+1).padStart(2,'0')}` !== currentKey))
+    const monthTitle = new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric' }).format(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+    return (
+    <View>
+      {showMonthHeader && (
+        <View style={styles.sectionHeader}><Text style={styles.sectionHeaderText}>{monthTitle}</Text></View>
+      )}
+      <TouchableOpacity style={styles.transactionItem} onPress={() => {
+        setEditTx(item)
+        setEditAmount(String(item.amount))
+        setEditDescription(item.description)
+        setEditType(item.type)
+        setEditCategory(categories.find(c => c.name === item.category?.name) || null)
+        setEditModalVisible(true)
+      }}>
+      <View style={[styles.categoryIcon, { backgroundColor: item.category.color + '20' }]}> 
+        <Ionicons name={item.category.icon as any} size={20} color={item.category.color} />
+      </View>
+      <View style={styles.transactionDetails}>
+        <Text style={styles.transactionDescription}>{item.description}</Text>
+        <Text style={styles.transactionMeta}>{item.category.name} • {new Date(item.transaction_date).toLocaleDateString()}</Text>
+      </View>
+      <Text style={[
+        styles.transactionAmount,
+        { color: item.type === 'income' ? '#50C878' : '#FF6B6B' }
+      ]}>
+        {(item.type === 'income' ? '+' : '-') + formatCurrency(item.amount, language)}
+      </Text>
+      </TouchableOpacity>
+    </View>
+    )
+  }
+
+  const renderCategory = ({ item }: { item: Category }) => (
+    <TouchableOpacity
+      style={[
+        styles.categoryItem,
+        selectedCategory?.id === item.id && styles.categoryItemSelected
+      ]}
+      onPress={() => {
+        if (categoryPickerTarget === 'add') {
+          setSelectedCategory(item)
+        } else if (categoryPickerTarget === 'edit') {
+          setEditCategory(item)
+        } else {
+          setFilterCategoryId(item.id)
+        }
+        setCategoryModalVisible(false)
       }}
-    ]);
-  };
-
-  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  const monthTitle = (d: Date) => d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-  const sections = (() => {
-    const groups: Record<string, Transaction[]> = {};
-    transactions.forEach((t) => {
-      const d = new Date(t.date);
-      const key = monthKey(d);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(t);
-    });
-    return Object.entries(groups)
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .map(([key, data]) => {
-        const [year, month] = key.split('-');
-        const d = new Date(Number(year), Number(month) - 1, 1);
-        return { title: monthTitle(d), data };
-      });
-  })();
-
-  const fmtCategory = (raw: string) => categoryMap[raw] ?? raw;
-
-  const findCategory = (raw: string): Category | undefined => {
-    return categories.find((c) => c.id === raw || (c as any).category_key === raw || c.name === raw);
-  };
-
-  const hexToRgb = (hex: string) => {
-    const norm = hex?.replace('#', '') || '64748B';
-    const r = parseInt(norm.substring(0, 2), 16) || 100;
-    const g = parseInt(norm.substring(2, 4), 16) || 116;
-    const b = parseInt(norm.substring(4, 6), 16) || 139;
-    return { r, g, b };
-  };
-  const pastel = (hex?: string, alpha = 0.15) => {
-    const { r, g, b } = hexToRgb(hex || '#64748B');
-    return `rgba(${r},${g},${b},${alpha})`;
-  };
-
-  const saveCategory = async () => {
-    try {
-      if (!newCat.name.trim()) {
-        Alert.alert('Validação', 'Informe um nome para a categoria');
-        return;
-      }
-      await categoryService.addCategory({ name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
-      const cats: Category[] = await categoryService.getCategories();
-      setCategories(cats);
-      const map: Record<string, string> = {};
-      cats.forEach((c) => {
-        if (c.id) map[c.id] = c.name;
-        // @ts-ignore
-        if (c.category_key) map[c.category_key as string] = c.name;
-        map[c.name] = c.name;
-      });
-      setCategoryMap(map);
-      setCatModalVisible(false);
-      setNewCat({ name: '', icon: 'pricetag-outline', color: '#64748B' });
-    } catch (e) {
-      Alert.alert('Erro', (e as Error).message);
-    }
-  };
+    >
+      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}> 
+        <Ionicons name={item.icon as any} size={20} color={item.color} />
+      </View>
+      <Text style={styles.categoryName}>{item.name}</Text>
+    </TouchableOpacity>
+  )
 
   return (
-    <PageContainer activeScreen="Transactions">
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <LinearGradient
-          colors={[gradients.info.from, gradients.info.to]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.title}>{t('transactions.title')}</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setModalVisible(true)}
         >
-          <View style={styles.heroRow}>
-            <Text style={styles.heroTitle}>Minhas Contas</Text>
-            <TouchableOpacity onPress={() => setAccountsOpen(o => !o)}>
-              <Ionicons name={accountsOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          {accountsOpen && (
-            <>
-              <View style={styles.cardsRow}>
-                <View style={[styles.accountCard, { backgroundColor: '#E6FFFB' }]}> 
-                  <Text style={[styles.cardAmount, { color: '#10B981' }]}>+ {currency(totalIncome)}</Text>
-                  <Text style={[styles.cardSubtitle, { color: '#1F2937' }]}>Receitas</Text>
-                  <Text style={[styles.cardDate, { color: '#64748B' }]}>{currentMonthLabel}</Text>
-                </View>
-                <View style={[styles.accountCard, { backgroundColor: '#FFF5F5' }]}> 
-                  <Text style={[styles.cardAmount, { color: '#EF4444' }]}>- {currency(totalExpense)}</Text>
-                  <Text style={[styles.cardSubtitle, { color: '#1F2937' }]}>Despesas</Text>
-                  <Text style={[styles.cardDate, { color: '#64748B' }]}>{currentMonthLabel}</Text>
-                </View>
-              </View>
-              <View style={{ marginTop: spacing.md }}>
-                <LineChart
-                  data={{
-                    labels,
-                    datasets: [
-                      { data: incomeSeries, color: () => '#10B981', strokeWidth: 2 },
-                      { data: expenseSeries, color: () => '#EF4444', strokeWidth: 2 },
-                    ],
-                    legend: ['Receitas', 'Despesas'],
-                  }}
-                  width={Math.floor(width - spacing.lg * 2)}
-                  height={140}
-                  chartConfig={chartConfig}
-                  bezier
-                  style={{ borderRadius: borderRadius.lg, overflow: 'hidden' }}
-                />
-              </View>
-            </>
-          )}
-          
-        </LinearGradient>
+          <Ionicons name="add" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.historyBlock}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.historyTitle}>Histórico</Text>
-            <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-              <Ionicons name="add-outline" size={18} color="#fff" />
-              <Text style={styles.addBtnText}>Nova Transação</Text>
-            </TouchableOpacity>
-          </View>
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-            scrollEnabled={false}
-            renderSectionHeader={({ section }) => (
-              <Text style={styles.monthHeader}>{section.title}</Text>
-            )}
-            renderItem={({ item }) => {
-              const cat = findCategory(item.category);
-              const catColor = cat?.color || colors.light.border;
-              return (
-                <View style={[styles.historyItemWrap, { borderColor: pastel(catColor, 0.3) }]}> 
-                  <LinearGradient
-                    colors={[pastel(catColor, 0.25), colors.light.card]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={styles.historyItemInner}
-                  >
-                    <View style={styles.historyLeft}>
-                      <View style={[styles.historyAvatar, { backgroundColor: pastel(catColor, 0.25) }]}> 
-                        <Ionicons name={(cat?.icon as any) || 'pricetag-outline'} size={18} color={catColor} />
-                      </View>
-                      <View style={styles.historyTextWrap}>
-                        <Text style={styles.historyTitleText} numberOfLines={1} ellipsizeMode="tail">{item.description}</Text>
-                        <Text style={styles.historySubtitleText} numberOfLines={1} ellipsizeMode="tail">{fmtCategory(item.category)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.historyActions}>
-                      <Text style={[styles.historyAmount, { color: item.type === 'expense' ? '#EF4444' : '#10B981' }]}>R$ {Math.abs(item.amount).toFixed(2)}</Text>
-                      <TouchableOpacity onPress={() => openEdit(item)}>
-                        <Ionicons name="create-outline" size={20} color={colors.light.subtext} />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => confirmDelete(item)}>
-                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </LinearGradient>
-                </View>
-              );
-            }}
-          />
-        </View>
-
-        {/* Modal de criação/edição */}
-        <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-            <View style={{ backgroundColor: colors.light.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
-              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>
-                {editing ? 'Editar Transação' : ''}
+      <View style={styles.filtersRow}>
+        <View style={styles.typeSelectorInline}>
+          {(['all','income','expense'] as const).map(ft => (
+            <TouchableOpacity
+              key={ft}
+              style={[styles.typeChip, filterType === ft && styles.typeChipActive]}
+              onPress={() => setFilterType(ft)}
+            >
+              <Text style={[styles.typeChipText, filterType === ft && styles.typeChipTextActive]}>
+                {ft === 'all' ? t('transactions.filters.type_all') : ft === 'income' ? t('transactions.filters.type_income') : t('transactions.filters.type_expense')}
               </Text>
-              <View style={{ gap: spacing.sm }}>
-                {/* Título como label destacada e editável */}
-                <View>
-                  {editingTitle ? (
-                    <TextInput
-                      value={form.description}
-                      onChangeText={(t) => setForm({ ...form, description: t })}
-                      style={styles.titleInput}
-                      placeholder="Defina o título"
-                      placeholderTextColor={colors.light.subtext}
-                      autoFocus
-                      onBlur={() => setEditingTitle(false)}
-                    />
-                  ) : (
-                    <TouchableOpacity style={styles.titleLabelRow} onPress={() => setEditingTitle(true)}>
-                      <Text style={styles.titleLabel}>{form.description || 'Adicionar título'}</Text>
-                      <Ionicons name="create-outline" size={18} color={colors.light.subtext} />
-                    </TouchableOpacity>
-                  )}
-                  {!form.description && (
-                    <Text style={styles.titleHelper}>Toque acima para preencher o título</Text>
-                  )}
-                </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.categoryFilter} onPress={() => { setCategoryPickerTarget('filter'); setCategoryModalVisible(true) }}>
+          <Text style={styles.categoryFilterText}>{t('transactions.filters.category')}</Text>
+          <Ionicons name="chevron-down" size={16} color="#666" />
+        </TouchableOpacity>
+        {!!filterCategoryId && (
+          <TouchableOpacity style={styles.clearFilter} onPress={() => setFilterCategoryId(null)}>
+            <Text style={styles.clearFilterText}>{t('transactions.filters.clear')}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-                {/* Seleção de tipo (Receita/Despesa) abaixo do título */}
-                <View style={styles.typeRow}>
-                  <TouchableOpacity
-                    onPress={() => setForm({ ...form, type: 'income' })}
-                    style={[styles.typeChoice, form.type === 'income' ? styles.typeIncomeActive : styles.typeNeutral]}
-                  >
-                    <Text style={styles.typeChoiceText}>Receita</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setForm({ ...form, type: 'expense' })}
-                    style={[styles.typeChoice, form.type === 'expense' ? styles.typeExpenseActive : styles.typeNeutral]}
-                  >
-                    <Text style={styles.typeChoiceText}>Despesa</Text>
-                  </TouchableOpacity>
-                </View>
+      <FlatList
+        data={transactions.filter(t => {
+          if (filterType !== 'all' && t.type !== filterType) return false
+          if (filterCategoryId && (t as any).category?.id !== filterCategoryId) return false
+          return true
+        })}
+        renderItem={renderTransaction}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshData} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="document-text-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>{t('transactions.empty.title')}</Text>
+            <Text style={styles.emptySubtext}>{t('transactions.empty.subtitle')}</Text>
+          </View>
+        }
+      />
 
-                {/* Valor */}
+      {/* Add Transaction Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('transactions.modal.title')}</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {/* Transaction Type */}
+              <View style={styles.typeSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    transactionType === 'income' && styles.typeButtonActive,
+                    { borderColor: '#50C878' }
+                  ]}
+                  onPress={() => setTransactionType('income')}
+                >
+                  <Text style={[
+                    styles.typeButtonText,
+                    transactionType === 'income' && styles.typeButtonTextActive
+                  ]}>
+                    {t('transactions.type.income')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    transactionType === 'expense' && styles.typeButtonActive,
+                    { borderColor: '#FF6B6B' }
+                  ]}
+                  onPress={() => setTransactionType('expense')}
+                >
+                  <Text style={[
+                    styles.typeButtonText,
+                    transactionType === 'expense' && styles.typeButtonTextActive
+                  ]}>
+                    {t('transactions.type.expense')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Amount */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.amount')}</Text>
                 <TextInput
-                  placeholder="Valor"
-                  keyboardType="numeric"
-                  value={String(form.amount || '')}
-                  onChangeText={(t) => setForm({ ...form, amount: Number(t) })}
                   style={styles.input}
-                  placeholderTextColor={colors.light.subtext}
+                  placeholder="0.00"
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor="#999"
                 />
-
-                {/* Seleção de Categoria com ícones e cores */}
-                <Text style={styles.sectionLabel}>Categoria</Text>
-                <View style={styles.catGrid}>
-                  {categories.map((c) => {
-                    const key = c.id || (c as any).category_key || c.name;
-                    const isActive = form.category === key;
-                    const color = c.color || colors.primary;
-                    return (
-                      <TouchableOpacity
-                        key={String(key)}
-                        style={[
-                          styles.catChip,
-                          { width: '48%' },
-                          isActive && { borderColor: color, backgroundColor: pastel(color, 0.2) },
-                        ]}
-                        onPress={() => setForm({ ...form, category: String(key) })}
-                        onLongPress={() => {
-                          setCatEditing(c);
-                          setNewCat({ name: c.name, icon: String(c.icon || 'pricetag-outline'), color: String(c.color || colors.primary) });
-                          setCatModalVisible(true);
-                        }}
-                      >
-                        <View style={[styles.catIconWrap, { backgroundColor: `${color}22` }]}> 
-                          <Ionicons name={(c.icon as any) || 'pricetag-outline'} size={16} color={color} />
-                        </View>
-                        <Text style={styles.catName}>{c.name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  <TouchableOpacity style={styles.catChipAdd} onPress={() => setCatModalVisible(true)}>
-                    <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-                    <Text style={styles.catName}>Nova categoria</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Ações */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.cancelText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={save}>
-                    <Text style={styles.saveText}>Salvar</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
-            </View>
-          </View>
-        </Modal>
 
-        {/* Modal: Nova Categoria */}
-        <Modal visible={catModalVisible} animationType="slide" transparent onRequestClose={() => setCatModalVisible(false)}>
-          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-            <View style={{ backgroundColor: colors.light.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
-              <Text style={{ color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800', marginBottom: spacing.sm }}>{catEditing ? 'Editar Categoria' : 'Nova Categoria'}</Text>
-              <View style={{ gap: spacing.sm }}>
-                <TextInput placeholder="Nome" value={newCat.name} onChangeText={(t) => setNewCat({ ...newCat, name: t })} style={styles.input} placeholderTextColor={colors.light.subtext} />
-                <Text style={styles.sectionLabel}>Ícone</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                  {iconOptions.map((ico) => (
-                    <TouchableOpacity key={ico} style={[styles.iconOption, newCat.icon === ico && styles.iconOptionActive]} onPress={() => setNewCat({ ...newCat, icon: ico })}>
-                      <Ionicons name={ico as any} size={18} color={colors.light.text} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.sectionLabel}>Cor</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                  {colorOptions.map((clr) => (
-                    <TouchableOpacity key={clr} style={[styles.colorDot, { backgroundColor: clr }, newCat.color === clr && styles.colorDotActive]} onPress={() => setNewCat({ ...newCat, color: clr })} />
-                  ))}
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => { setCatModalVisible(false); setCatEditing(null); }}>
-                    <Text style={styles.cancelText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                    {catEditing && (
-                      <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={async () => {
-                        try {
-                          if (catEditing?.id) {
-                            await categoryService.deleteCategory(catEditing.id);
-                          }
-                          const cats: Category[] = await categoryService.getCategories();
-                          setCategories(cats);
-                          const map: Record<string, string> = {};
-                          cats.forEach((c) => {
-                            if (c.id) map[c.id] = c.name;
-                            if (c.category_key) map[c.category_key as string] = c.name;
-                            map[c.name] = c.name;
-                          });
-                          setCategoryMap(map);
-                          setCatModalVisible(false);
-                          setCatEditing(null);
-                        } catch (e) {
-                          Alert.alert('Erro', (e as Error).message);
-                        }
-                      }}>
-                        <Text style={styles.cancelText}>Excluir</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={async () => {
-                      try {
-                        if (!newCat.name.trim()) {
-                          Alert.alert('Validação', 'Informe um nome para a categoria');
-                          return;
-                        }
-                        if (catEditing?.id) {
-                          await categoryService.updateCategory(catEditing.id, { name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
-                        } else {
-                          await categoryService.addCategory({ name: newCat.name.trim(), icon: newCat.icon, color: newCat.color } as any);
-                        }
-                        const cats: Category[] = await categoryService.getCategories();
-                        setCategories(cats);
-                        const map: Record<string, string> = {};
-                        cats.forEach((c) => {
-                          if (c.id) map[c.id] = c.name;
-                          if (c.category_key) map[c.category_key as string] = c.name;
-                          map[c.name] = c.name;
-                        });
-                        setCategoryMap(map);
-                        setCatModalVisible(false);
-                        setCatEditing(null);
-                        setNewCat({ name: '', icon: 'pricetag-outline', color: '#64748B' });
-                      } catch (e) {
-                        Alert.alert('Erro', (e as Error).message);
-                      }
-                    }}>
-                      <Text style={styles.saveText}>Salvar</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              {/* Description */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.description')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('transactions.description.placeholder')}
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholderTextColor="#999"
+                />
               </View>
-            </View>
+
+              {/* Category */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.category')}</Text>
+                <TouchableOpacity
+                  style={styles.categorySelector}
+                  onPress={() => { setCategoryPickerTarget('add'); setCategoryModalVisible(true) }}
+                >
+                  {selectedCategory ? (
+                    <View style={styles.selectedCategory}>
+                      <View style={[styles.categoryIcon, { backgroundColor: selectedCategory.color + '20' }]}>
+                        <Ionicons name={selectedCategory.icon as any} size={16} color={selectedCategory.color} />
+                      </View>
+                      <Text style={styles.selectedCategoryText}>{selectedCategory.name}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.placeholderText}>{t('transactions.category.select_placeholder')}</Text>
+                  )}
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Add Button */}
+              <TouchableOpacity style={styles.addTransactionButton} onPress={addTransaction}>
+                <Text style={styles.addTransactionButtonText}>{t('transactions.add_button')}</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </Modal>
-      </ScrollView>
-    </PageContainer>
-  );
+        </View>
+      </Modal>
+
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('transactions.modal.edit_title')}</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.typeSelector}>
+                <TouchableOpacity
+                  style={[styles.typeButton, editType === 'income' && styles.typeButtonActive, { borderColor: '#50C878' }]}
+                  onPress={() => setEditType('income')}
+                >
+                  <Text style={[styles.typeButtonText, editType === 'income' && styles.typeButtonTextActive]}>
+                    {t('transactions.type.income')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.typeButton, editType === 'expense' && styles.typeButtonActive, { borderColor: '#FF6B6B' }]}
+                  onPress={() => setEditType('expense')}
+                >
+                  <Text style={[styles.typeButtonText, editType === 'expense' && styles.typeButtonTextActive]}>
+                    {t('transactions.type.expense')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.amount')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  value={editAmount}
+                  onChangeText={setEditAmount}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.description')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('transactions.description.placeholder')}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('transactions.category')}</Text>
+                <TouchableOpacity style={styles.categorySelector} onPress={() => { setCategoryPickerTarget('edit'); setCategoryModalVisible(true) }}>
+                  {editCategory ? (
+                    <View style={styles.selectedCategory}>
+                      <View style={[styles.categoryIcon, { backgroundColor: editCategory.color + '20' }]}> 
+                        <Ionicons name={editCategory.icon as any} size={16} color={editCategory.color} />
+                      </View>
+                      <Text style={styles.selectedCategoryText}>{editCategory.name}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.placeholderText}>{t('transactions.category.select_placeholder')}</Text>
+                  )}
+                  <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.addTransactionButton} onPress={async () => {
+                if (!editTx) return
+                try {
+                  const { error } = await supabase
+                    .from('transactions')
+                    .update({
+                      amount: parseFloat(editAmount),
+                      description: editDescription,
+                      type: editType,
+                      category_id: editCategory?.id,
+                    })
+                    .eq('id', editTx.id)
+                  if (error) throw error
+                  setEditModalVisible(false)
+                  setEditTx(null)
+                  await fetchTransactions()
+                  Alert.alert(t('transactions.alert.success_title'), t('transactions.alert.success_edit'))
+                } catch (e) {
+                  Alert.alert(t('transactions.alert.error_title'), t('transactions.alert.error_edit'))
+                }
+              }}>
+                <Text style={styles.addTransactionButtonText}>{t('transactions.modal.edit_title')}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+  {/* Category Selection Modal */}
+  <Modal
+    visible={categoryModalVisible}
+    transparent
+    animationType="slide"
+    onRequestClose={() => setCategoryModalVisible(false)}
+  >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('transactions.category.modal.title')}</Text>
+              <TouchableOpacity onPress={() => setCategoryModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={categories}
+              renderItem={renderCategory}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.categoryList}
+              ListFooterComponent={(
+                <TouchableOpacity
+                  style={styles.createCategoryButton}
+                  onPress={() => {
+                    setCategoryModalVisible(false)
+                    setCategoryManagerVisible(true)
+                  }}
+                >
+                  <Ionicons name="add-circle" size={24} color="#4A90E2" />
+                  <Text style={styles.createCategoryText}>{t('transactions.category.create_new')}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category Manager Modal */}
+      <CategoryManager
+        visible={categoryManagerVisible}
+        onClose={() => setCategoryManagerVisible(false)}
+        onCategoryCreated={(newCategory) => {
+          setCategories(prev => [...prev, newCategory])
+          setSelectedCategory(newCategory)
+        }}
+        userId={user?.id || ''}
+      />
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-  hero: { borderRadius: borderRadius.xl, padding: spacing.lg },
-  heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroTitle: { color: '#fff', fontSize: fontSize.lg, fontWeight: '800' },
-  cardsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  accountCard: { flex: 1, borderRadius: borderRadius.lg, padding: spacing.md },
-  cardAmount: { color: '#1F2937', fontSize: fontSize.lg, fontWeight: '800' },
-  cardSubtitle: { color: '#1F2937', marginTop: 4 },
-  cardDate: { color: '#1F2937', opacity: 0.7, marginTop: 2, fontSize: fontSize.sm },
-  statsBlock: { backgroundColor: colors.light.card, borderRadius: borderRadius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.light.border },
-  statsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  statsTitle: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
-  historyBlock: { backgroundColor: colors.light.card, borderRadius: borderRadius.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.light.border },
-  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  historyTitle: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
-  monthHeader: { color: colors.light.subtext, fontSize: fontSize.sm, marginBottom: spacing.sm, marginTop: spacing.md },
-  historyItemWrap: { backgroundColor: colors.light.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.light.border, overflow: 'hidden' },
-  historyItemInner: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  historyItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.light.card, padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.light.border },
-  historyAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.light.border, alignItems: 'center', justifyContent: 'center' },
-  historyLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 },
-  historyTextWrap: { flex: 1, minWidth: 0 },
-  historyTitleText: { color: colors.light.text, fontWeight: '700' },
-  historySubtitleText: { color: colors.light.subtext, fontSize: fontSize.sm },
-  historyActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  historyAmount: { fontSize: fontSize.md, fontWeight: '700' },
-  input: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.light.text },
-  typeBtn: { flex: 1, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.round, paddingVertical: 10, alignItems: 'center', backgroundColor: colors.light.card },
-  typeBtnActive: { borderColor: colors.primary },
-  typeBtnText: { color: colors.light.text, fontWeight: '600' },
-  modalBtn: { paddingVertical: 12, paddingHorizontal: spacing.lg, borderRadius: borderRadius.lg },
-  cancelBtn: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border },
-  saveBtn: { backgroundColor: colors.primary },
-  cancelText: { color: colors.light.text, fontWeight: '600' },
-  saveText: { color: '#fff', fontWeight: '700' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: borderRadius.round },
-  addBtnText: { color: '#fff', fontWeight: '700' },
-  titleLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
-  titleLabel: { color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
-  titleHelper: { color: colors.light.subtext, fontSize: fontSize.sm, marginTop: spacing.xs },
-  titleInput: { backgroundColor: colors.light.card, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.light.text, fontSize: fontSize.lg, fontWeight: '800' },
-  typeRow: { flexDirection: 'row', gap: spacing.sm },
-  typeChoice: { flex: 1, borderWidth: 1, borderRadius: borderRadius.round, paddingVertical: 10, alignItems: 'center' },
-  typeNeutral: { backgroundColor: colors.light.card, borderColor: colors.light.border },
-  typeIncomeActive: { borderColor: '#10B981', backgroundColor: '#E6FFFB' },
-  typeExpenseActive: { borderColor: '#EF4444', backgroundColor: '#FFF5F5' },
-  typeIncomeBtn: { borderColor: '#10B981', backgroundColor: '#E6FFFB' },
-  typeExpenseBtn: { borderColor: '#EF4444', backgroundColor: '#FFF5F5' },
-  typeActive: { borderWidth: 2 },
-  typeChoiceText: { color: colors.light.text, fontWeight: '600' },
-  typeChoiceTextActive: { color: colors.light.text },
-  sectionLabel: { color: colors.light.subtext, fontWeight: '700', marginTop: spacing.sm },
-  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between' },
-  catChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.round, backgroundColor: colors.light.card },
-  catChipActive: { borderColor: colors.primary },
-  catIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  catName: { color: colors.light.text, fontWeight: '600' },
-  catChipAdd: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: borderRadius.round, backgroundColor: colors.light.card },
-  iconOption: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.light.border, borderRadius: borderRadius.md, backgroundColor: colors.light.card },
-  iconOptionActive: { borderColor: colors.primary },
-  colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: colors.light.border },
-  colorDotActive: { borderColor: colors.primary },
-});
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4A90E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listContainer: {
+    paddingHorizontal: 24,
+  },
+  transactionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionDescription: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  transactionMeta: {
+    fontSize: 12,
+    color: '#666',
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalBody: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  typeButtonActive: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  typeButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  typeButtonTextActive: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  categorySelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  selectedCategory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedCategoryText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 8,
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: '#999',
+  },
+  addTransactionButton: {
+    backgroundColor: '#4A90E2',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addTransactionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  typeSelectorInline: {
+    flexDirection: 'row',
+    gap: 8,
+    flex: 1,
+  },
+  typeChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+  },
+  typeChipActive: {
+    borderColor: '#4A90E2',
+    backgroundColor: '#EAF2FD',
+  },
+  typeChipText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  typeChipTextActive: {
+    color: '#4A90E2',
+  },
+  categoryFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+  },
+  categoryFilterText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  clearFilter: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  clearFilterText: {
+    color: '#4A90E2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  categoryList: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+  categoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  categoryItemSelected: {
+    backgroundColor: '#F0F8FF',
+  },
+  categoryName: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 12,
+  },
+  createCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    marginTop: 8,
+  },
+  createCategoryText: {
+    fontSize: 16,
+    color: '#4A90E2',
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+})

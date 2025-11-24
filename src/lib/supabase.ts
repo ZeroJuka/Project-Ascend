@@ -1,19 +1,13 @@
-import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
-import { AppState, Platform } from 'react-native';
-import logger from '../utils/logger';
+import { createClient } from '@supabase/supabase-js'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import Constants from 'expo-constants'
 
-
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
-
-const supabaseUrl = SUPABASE_URL;
-const supabaseAnonKey = SUPABASE_ANON_KEY;
+const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL || ''
+const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || ''
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  logger.error('Supabase não configurado: verifique SUPABASE_URL e SUPABASE_ANON_KEY no arquivo .env');
+  throw new Error('Missing Supabase environment variables')
 }
-
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -22,14 +16,191 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
-});
+})
 
-if (Platform.OS !== 'web') {
-  AppState.addEventListener('change', (state) => {
-    if (state === 'active') {
-      supabase.auth.startAutoRefresh();
-    } else {
-      supabase.auth.stopAutoRefresh();
+export type Database = {
+  public: {
+    Tables: {
+      categories: {
+        Row: {
+          id: string
+          user_id: string | null
+          name: string
+          color: string
+          icon: string
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          name: string
+          color?: string
+          icon?: string
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          name?: string
+          color?: string
+          icon?: string
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      transactions: {
+        Row: {
+          id: string
+          user_id: string | null
+          category_id: string | null
+          amount: number
+          description: string
+          transaction_date: string
+          type: 'income' | 'expense'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          category_id?: string | null
+          amount: number
+          description: string
+          transaction_date?: string
+          type: 'income' | 'expense'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          category_id?: string | null
+          amount?: number
+          description?: string
+          transaction_date?: string
+          type?: 'income' | 'expense'
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      goals: {
+        Row: {
+          id: string
+          user_id: string | null
+          title: string
+          description: string | null
+          target_amount: number
+          current_amount: number
+          goal_type: 'spend_less' | 'spend_more' | 'save'
+          time_period: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'one_time'
+          start_date: string
+          end_date: string | null
+          is_recurring: boolean
+          category_ids: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          title: string
+          description?: string | null
+          target_amount: number
+          current_amount?: number
+          goal_type: 'spend_less' | 'spend_more' | 'save'
+          time_period: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'one_time'
+          start_date?: string
+          end_date?: string | null
+          is_recurring?: boolean
+          category_ids?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          title?: string
+          description?: string | null
+          target_amount?: number
+          current_amount?: number
+          goal_type?: 'spend_less' | 'spend_more' | 'save'
+          time_period?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'one_time'
+          start_date?: string
+          end_date?: string | null
+          is_recurring?: boolean
+          category_ids?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      bills: {
+        Row: {
+          id: string
+          user_id: string | null
+          title: string
+          amount: number
+          due_date: string
+          frequency: 'once' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+          category_id: string | null
+          is_paid: boolean
+          paid_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          title: string
+          amount: number
+          due_date: string
+          frequency: 'once' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+          category_id?: string | null
+          is_paid?: boolean
+          paid_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          title?: string
+          amount?: number
+          due_date?: string
+          frequency?: 'once' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+          category_id?: string | null
+          is_paid?: boolean
+          paid_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      chat_messages: {
+        Row: {
+          user_id: string
+          conversation: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          conversation: any
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          conversation?: any
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
-  });
+  }
 }
+
+export type Tables = Database['public']['Tables']

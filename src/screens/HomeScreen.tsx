@@ -1,135 +1,471 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, Modal } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import PageContainer from '../components/ui/PageContainer';
-import Chip from '../components/ui/Chip';
-import { colors, spacing, borderRadius, fontSize, gradients } from '../utils/theme';
-import { LineChart } from 'react-native-chart-kit';
-import { chartConfig } from '../components/ui/ChartWrapper';
-import { useAnalytics } from '../hooks/useAnalytics';
-import { useAuth } from '../hooks/useAuth';
-import { commonStyles } from '../utils/Styles';
+import React, { useEffect, useState, useCallback } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
+import { useNavigation, useIsFocused } from '@react-navigation/native'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useSettings } from '../contexts/SettingsContext'
+import { formatCurrency } from '../utils/currency'
 
 export default function HomeScreen() {
-  const { kpis, series } = useAnalytics();
-  const { user, signOut } = useAuth();
-  const [profileVisible, setProfileVisible] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-  const width = Dimensions.get('window').width - 32;
-  const currency = (n: number) => `R$ ${(n || 0).toLocaleString('pt-BR')}`;
-  const displayName = user?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : '[USER]');
-  const email = user?.email || 'email@dominio.com';
+  const [financialData, setFinancialData] = useState({
+    totalBalance: 0,
+    totalIncome: 0,
+    totalExpenses: 0,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+  })
+  const [insights, setInsights] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const { user } = useAuth()
+  const { t } = useI18n()
+  const { displayName, avatarUri, language } = useSettings()
+  const navigation = useNavigation()
+  const isFocused = useIsFocused()
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    fetchFinancialData()
+  }, [])
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    if (isFocused) {
+      fetchFinancialData()
+    }
+  }, [isFocused])
+
+  const fetchFinancialData = async () => {
+    try {
+      if (!refreshing) setLoading(true)
+      const currentDate = new Date()
+      const currentMonth = currentDate.getMonth() + 1
+      const currentYear = currentDate.getFullYear()
+
+      // Fetch all transactions for the user
+      const { data: transactions } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user?.id)
+
+      // Calculate totals
+      const totalIncome = transactions
+        ?.filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
+
+      const totalExpenses = transactions
+        ?.filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
+
+      // Calculate monthly totals
+      const monthlyTransactions = transactions?.filter(t => {
+        const transactionDate = new Date(t.transaction_date)
+        return (
+          transactionDate.getMonth() + 1 === currentMonth &&
+          transactionDate.getFullYear() === currentYear
+        )
+      })
+
+      const monthlyIncome = monthlyTransactions
+        ?.filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
+
+      const monthlyExpenses = monthlyTransactions
+        ?.filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
+
+      // Generate insights
+      const insights = generateInsights(transactions || [], monthlyIncome, monthlyExpenses)
+
+      setFinancialData({
+        totalBalance: totalIncome - totalExpenses,
+        totalIncome,
+        totalExpenses,
+        monthlyIncome,
+        monthlyExpenses,
+      })
+      setInsights(insights)
+    } catch (error) {
+      console.error('Error fetching financial data:', error)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  const generateInsights = (transactions: any[], monthlyIncome: number, monthlyExpenses: number) => {
+    const insights = []
+    
+    // Spending vs Income insight
+    if (monthlyExpenses > monthlyIncome * 0.8) {
+      insights.push({
+        id: 'spending-high',
+        title: 'High Spending Alert',
+        description: `You've spent ${((monthlyExpenses / monthlyIncome) * 100).toFixed(0)}% of your income this month`,
+        icon: 'warning',
+        color: '#FF6B6B',
+        action: 'Review spending'
+      })
+    }
+
+    // Savings opportunity
+    if (monthlyIncome > monthlyExpenses) {
+      const savings = monthlyIncome - monthlyExpenses
+      insights.push({
+        id: 'savings-opportunity',
+        title: 'Savings Opportunity',
+        description: `You could save $${savings.toFixed(0)} this month`,
+        icon: 'trending-up',
+        color: '#50C878',
+        action: 'Set savings goal'
+      })
+    }
+
+    // Top spending category
+    const expensesByCategory = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => {
+        acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount)
+        return acc
+      }, {})
+    
+    const topCategory = Object.entries(expensesByCategory)
+      .sort(([,a], [,b]) => (b as number) - (a as number))[0]
+    
+    if (topCategory) {
+      insights.push({
+        id: 'top-category',
+        title: 'Top Spending Category',
+        description: `${topCategory[0]}: $${(topCategory[1] as number).toFixed(0)}`,
+        icon: 'pricetag',
+        color: '#45B7D1',
+        action: 'View details'
+      })
+    }
+
+    return insights.slice(0, 3) // Show max 3 insights
+  }
+
+  const quickActions = [
+    {
+      title: t('home.action.add_transaction'),
+      icon: 'add-circle',
+      color: '#4A90E2',
+      onPress: () => navigation.navigate('Transactions' as never),
+    },
+    {
+      title: t('home.action.view_goals'),
+      icon: 'trophy',
+      color: '#50C878',
+      onPress: () => navigation.navigate('Goals' as never),
+    },
+    {
+      title: t('home.action.analytics'),
+      icon: 'stats-chart',
+      color: '#FF6B6B',
+      onPress: () => navigation.navigate('Dashboard' as never),
+    },
+  ]
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#4A90E2" />
+      </View>
+    )
+  }
 
   return (
-    <PageContainer activeScreen="Home">
-      <View style={styles.content}>
-        <LinearGradient
-          colors={[gradients.brand.from, gradients.brand.to]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
-        >
-          <View style={styles.heroTop}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={() => setProfileVisible(true)} activeOpacity={0.8}>
-                <Image source={require('../../assets/icon.png')} style={styles.avatar} />
-              </TouchableOpacity>
-              <Text style={styles.username}>{displayName}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Ionicons name="search" size={20} color="#fff" />
-              <Ionicons name="menu" size={20} color="#fff" />
-            </View>
+    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchFinancialData() }} />}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.navigate('User' as never)}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder} />
+            )}
+          </TouchableOpacity>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.greeting}>{t('home.greeting')}</Text>
+            <Text style={styles.userName}>{displayName || user?.email?.split('@')[0]}</Text>
           </View>
-          <Text style={styles.balanceLabel}>Seu saldo</Text>
-          <Text style={styles.balanceAmount}>{currency(kpis?.balanceThisMonth || 24165)}</Text>
-        </LinearGradient>
-
-        <View style={[
-          styles.reportsCard,
-          { backgroundColor: isDark ? colors.dark.card : colors.light.card, borderColor: isDark ? colors.dark.border : colors.light.border }
-        ]}>
-          <View style={styles.reportsHeaderRow}>
-            <Text style={[styles.reportsTitle, { color: isDark ? colors.dark.text : colors.light.text }]}>Relatórios</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Chip label="Dia" />
-              <Chip label="Semana" />
-              <Chip label="Mês" active />
-              <Chip label="Ano" />
-            </View>
-          </View>
-          <LineChart
-            data={{ labels: series?.labels || [], datasets: [{ data: series?.balance || [] }] }}
-            width={width}
-            height={200}
-            chartConfig={chartConfig}
-            bezier
-            style={{ borderRadius: borderRadius.lg, overflow: 'hidden' }}
-          />
         </View>
-
-        {/* Modal de Perfil */}
-        <Modal visible={profileVisible} transparent animationType="fade" onRequestClose={() => setProfileVisible(false)}>
-          <View style={commonStyles.modalOverlay}>
-            <View style={commonStyles.userProfileCard}>
-              <View style={commonStyles.userProfileHeader}>
-                <Text style={commonStyles.userProfileTitle}>Perfil</Text>
-                <TouchableOpacity onPress={() => setProfileVisible(false)} accessibilityLabel="Fechar">
-                  <Ionicons name="close" size={22} color="#666" />
-                </TouchableOpacity>
-              </View>
-              <View style={commonStyles.userProfileContent}>
-                <View style={commonStyles.userProfileAvatar}>
-                  <Image source={require('../../assets/icon.png')} style={{ width: 80, height: 80, borderRadius: 40 }} />
-                </View>
-                <Text style={commonStyles.userProfileName}>{displayName}</Text>
-                <Text style={commonStyles.userProfileEmail}>{email}</Text>
-
-                <TouchableOpacity
-                  style={[styles.themeToggleButton, { backgroundColor: isDark ? '#111827' : '#2563EB' }]}
-                  activeOpacity={0.85}
-                  onPress={() => setIsDark(v => !v)}
-                >
-                  <Text style={[styles.themeToggleText, { color: '#fff' }]}>{isDark ? 'Usar tema claro' : 'Usar tema escuro'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={commonStyles.signOutButton} activeOpacity={0.85} onPress={signOut}>
-                  <Text style={commonStyles.signOutButtonText}>Sair</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </View>
-    </PageContainer>
-  );
+
+      {/* Balance Card */}
+      <LinearGradient
+        colors={['#4A90E2', '#357ABD']}
+        style={styles.balanceCard}
+      >
+        <Text style={styles.balanceLabel}>{t('home.total_balance')}</Text>
+        <Text style={styles.balanceAmount}>
+          {formatCurrency(financialData.totalBalance, language)}
+        </Text>
+        <View style={styles.balanceRow}>
+          <View style={styles.balanceItem}>
+            <Ionicons name="trending-up" size={16} color="#50C878" />
+            <Text style={styles.balanceItemText}>
+              {formatCurrency(financialData.monthlyIncome, language)}
+            </Text>
+          </View>
+          <View style={styles.balanceItem}>
+            <Ionicons name="trending-down" size={16} color="#FF6B6B" />
+            <Text style={styles.balanceItemText}>
+              {formatCurrency(financialData.monthlyExpenses, language)}
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {/* Quick Actions */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('home.quick_actions')}</Text>
+        <View style={styles.actionsGrid}>
+          {quickActions.map((action, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.actionButton}
+              onPress={action.onPress}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: action.color + '20' }]}>
+                <Ionicons name={action.icon as any} size={24} color={action.color} />
+              </View>
+              <Text style={styles.actionText}>{action.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Quick Insights */}
+      {insights.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('home.quick_insights')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insightsScroll}>
+            {insights.map((insight) => (
+              <TouchableOpacity
+                key={insight.id}
+                style={[styles.insightCard, { borderLeftColor: insight.color }]}
+                onPress={() => {
+                  if (insight.action === 'Review spending') {
+                    navigation.navigate('Transactions' as never)
+                  } else if (insight.action === 'Set savings goal') {
+                    navigation.navigate('Goals' as never)
+                  } else if (insight.action === 'View details') {
+                    navigation.navigate('Dashboard' as never)
+                  }
+                }}
+              >
+                <View style={styles.insightHeader}>
+                  <Ionicons name={insight.icon as any} size={20} color={insight.color} />
+                  <Text style={[styles.insightTitle, { color: insight.color }]}>
+                    {insight.title}
+                  </Text>
+                </View>
+                <Text style={styles.insightDescription} numberOfLines={2}>
+                  {insight.description}
+                </Text>
+                <Text style={[styles.insightAction, { color: insight.color }]}>
+                  {insight.action}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Monthly Overview */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('home.this_month')}</Text>
+        <View style={styles.overviewCard}>
+          <View style={styles.overviewItem}>
+            <Text style={styles.overviewLabel}>{t('home.income')}</Text>
+            <Text style={[styles.overviewValue, { color: '#50C878' }]}>
+              ${financialData.monthlyIncome.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.overviewItem}>
+            <Text style={styles.overviewLabel}>{t('home.expenses')}</Text>
+            <Text style={[styles.overviewValue, { color: '#FF6B6B' }]}>
+              ${financialData.monthlyExpenses.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.overviewItem}>
+            <Text style={styles.overviewLabel}>{t('home.net')}</Text>
+            <Text style={[styles.overviewValue, { 
+              color: financialData.monthlyIncome - financialData.monthlyExpenses >= 0 ? '#50C878' : '#FF6B6B' 
+            }]}>
+              {formatCurrency(financialData.monthlyIncome - financialData.monthlyExpenses, language)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
+  )
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-  hero: {
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
   },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  username: { marginLeft: spacing.sm, color: '#fff', fontWeight: '800' },
-  balanceLabel: { marginTop: spacing.md, color: '#fff', opacity: 0.9 },
-  balanceAmount: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 4 },
-  reportsCard: {
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  reportsHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  reportsTitle: { fontSize: fontSize.lg, fontWeight: '800' },
-  themeToggleButton: {
-    width: '100%',
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
+  header: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
-  themeToggleText: { fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
-});
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTextCol: {
+    flexDirection: 'column',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
+  },
+  avatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E0E0E0',
+  },
+  greeting: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  balanceCard: {
+    marginHorizontal: 24,
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.8,
+    marginBottom: 8,
+  },
+  balanceAmount: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  balanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  balanceItemText: {
+    fontSize: 14,
+    color: '#fff',
+    marginLeft: 4,
+  },
+  section: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginHorizontal: 4,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  actionText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  overviewCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  overviewItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  overviewLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  overviewValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  divider: {
+    width: 1,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 8,
+  },
+})

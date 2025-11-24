@@ -1,45 +1,46 @@
-import { ExpoConfig } from 'expo/config';
+import 'dotenv/config'
 
-const config: ExpoConfig = {
-  name: 'Ascend',
-  slug: 'ascend',
-  version: '1.0.0',
-  orientation: 'portrait',
-  icon: './assets/icon.png',
-  userInterfaceStyle: 'dark',
-  splash: {
-    image: './assets/splash-icon.png',
-    resizeMode: 'contain',
-    backgroundColor: '#1F2937'
-  },
-  updates: {
-    fallbackToCacheTimeout: 0
-  },
-  assetBundlePatterns: [
-    '**/*'
-  ],
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: 'com.ascend.app'
-  },
-  android: {
-    adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#1F2937'
+export default {
+  expo: {
+    name: "ASCEND",
+    slug: "ascend-financial-app",
+    version: "1.0.0",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "light",
+    splash: {
+      image: "./assets/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff"
     },
-    package: 'com.ascend.app'
-  },
-  web: {
-    favicon: './assets/favicon.png'
-  },
-  extra: {
-    eas: {
-      projectId: 'your-project-id'
+    assetBundlePatterns: [
+      "**/*"
+    ],
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.ascend.financial"
+    },
+    android: {
+      adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#FFFFFF"
+      },
+      package: "com.ascend.financial"
+    },
+    web: {
+      favicon: "./assets/favicon.png"
+    },
+    plugins: [],
+    extra: {
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      HUGGINGFACE_API_KEY: process.env.HUGGINGFACE_API_KEY,
+      WHISPER_MODEL_URL: process.env.WHISPER_MODEL_URL,
+      RECAPTCHA_SITE_KEY: process.env.RECAPTCHA_SITE_KEY,
+      RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY,
+      APP_NAME: process.env.APP_NAME || "ASCEND",
+      APP_VERSION: process.env.APP_VERSION || "1.0.0"
     }
-  },
-  plugins: [
-    'expo-font'
-  ]
-};
-
-export default config;
+  }
+}
