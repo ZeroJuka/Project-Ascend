@@ -36,6 +36,10 @@ interface ChatEntry {
   }
 }
 
+interface RepoTest {
+  message: string
+}
+
 interface ConfirmationModal {
   visible: boolean
   type: 'transaction' | 'goal'
