@@ -468,4 +468,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     marginHorizontal: 8,
   },
+  insightsScroll: {
+    paddingHorizontal: 24,
+  },
+  insightCard: {
+    width: 240,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginRight: 12,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  insightTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  insightDescription: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 8,
+  },
+  insightAction: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 })

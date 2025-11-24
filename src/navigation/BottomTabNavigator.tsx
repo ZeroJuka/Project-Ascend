@@ -18,7 +18,7 @@ function AIButton() {
   const navigation = useNavigation()
   const [isRecording, setIsRecording] = React.useState(false)
   const insets = useSafeAreaInsets()
-  const [recordingTimer, setRecordingTimer] = React.useState<NodeJS.Timeout | null>(null)
+  const [recordingTimer, setRecordingTimer] = React.useState<number | null>(null)
 
   // Cleanup on unmount
   React.useEffect(() => {
