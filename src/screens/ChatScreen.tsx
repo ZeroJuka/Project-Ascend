@@ -40,6 +40,10 @@ interface RepoTest {
   message: string
 }
 
+interface RepoTest2 {
+  message: string
+}
+
 interface ConfirmationModal {
   visible: boolean
   type: 'transaction' | 'goal'
