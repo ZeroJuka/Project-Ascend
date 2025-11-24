@@ -36,13 +36,7 @@ interface ChatEntry {
   }
 }
 
-interface RepoTest {
-  message: string
-}
 
-interface RepoTest2 {
-  message: string
-}
 
 interface ConfirmationModal {
   visible: boolean
