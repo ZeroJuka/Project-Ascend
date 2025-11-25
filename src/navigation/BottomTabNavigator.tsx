@@ -1,5 +1,5 @@
 import React from 'react'
-import { TouchableOpacity, StyleSheet, View, Text, Platform, Dimensions, Alert } from 'react-native'
+import { TouchableOpacity, StyleSheet, View, Text, Platform, Dimensions, Alert, Image} from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useNavigation, NavigationProp, ParamListBase } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -20,10 +20,8 @@ function AIButton() {
   const insets = useSafeAreaInsets()
   const [recordingTimer, setRecordingTimer] = React.useState<number | null>(null)
 
-  // Cleanup on unmount
   React.useEffect(() => {
     return () => {
-      // Clean up any active recording when component unmounts
       if (isRecording) {
         console.log('Cleaning up active recording on unmount')
         voiceTranscriptionService.forceStopRecording()
@@ -35,12 +33,10 @@ function AIButton() {
   }, [])
 
   const handlePress = () => {
-    // Simple tap navigates to chat
     navigation.navigate('Chat')
   }
 
   const handleLongPress = async () => {
-    // Prevent multiple simultaneous recording attempts
     if (isRecording || voiceTranscriptionService.getIsRecording()) {
       console.log('Recording already in progress, ignoring long press')
       return
@@ -48,7 +44,6 @@ function AIButton() {
     
     console.log('Long press detected - waiting 2 seconds before starting recording...')
     
-    // Start a 2-second timer before recording begins
     const startTimer = setTimeout(async () => {
       try {
         console.log('2 seconds elapsed - starting voice recording...')
@@ -57,7 +52,6 @@ function AIButton() {
         await voiceTranscriptionService.startRecording()
         console.log('Voice recording started successfully')
         
-        // Auto-stop recording after 10 seconds for safety (total 12 seconds from press)
         const maxTimer = setTimeout(async () => {
           if (isRecording || voiceTranscriptionService.getIsRecording()) {
             console.log('Auto-stopping recording after 10 seconds of recording')
@@ -70,20 +64,17 @@ function AIButton() {
         console.error('Failed to start recording:', error)
         setIsRecording(false)
         
-        // Show user-friendly feedback
         Alert.alert(
           'Voice Recording',
           'Unable to start voice recording. Please ensure microphone permissions are granted and try again.',
           [{ text: 'OK' }]
         )
       }
-    }, 1000) // Wait 1 second before starting recording
-    
+    }, 1000)    
     setRecordingTimer(startTimer)
   }
 
   const handlePressOut = async () => {
-    // Check if we have a pending start timer (user released before 2 seconds)
     if (recordingTimer && !isRecording) {
       console.log('User released before recording started - canceling start timer')
       clearTimeout(recordingTimer)
@@ -149,11 +140,17 @@ function AIButton() {
       onPressOut={handlePressOut}
       delayLongPress={500}
     >
-      <Ionicons
-        name={isRecording ? 'mic' : 'sparkles'}
-        size={28}
-        color="#fff"
-      />
+      {isRecording ? (
+        <Ionicons
+          name= 'mic'
+          size={28}
+          color="#fff"
+        />)
+        : (<Image source={require('../../assets/logo_nobackground.png')} 
+          style={{ width: 35, height: 35, tintColor: '#fff' }}   
+          resizeMode="contain"
+        />)
+      }
       {isRecording && (
         <View style={styles.recordingIndicator} />
       )}

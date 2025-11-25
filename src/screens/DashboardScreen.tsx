@@ -10,6 +10,8 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import Svg, { Path, Line as SvgLine, Text as SvgText, Rect, G } from 'react-native-svg'
+import { Dimensions } from 'react-native'
 import { useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -35,6 +37,7 @@ interface CategorySpending {
   amount: number
   color: string
   icon: string
+  percent: number
 }
 
 interface TransactionTrend {
@@ -65,11 +68,21 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets()
   const [refreshing, setRefreshing] = useState(false)
   const { language } = useSettings()
+  const [advancedInsights, setAdvancedInsights] = useState<{ icon: string; color: string; text: string }[]>([])
+  const [overspendAlerts, setOverspendAlerts] = useState<{ category: string; pct: number; amount: number }[]>([])
+  const [projectionSeries, setProjectionSeries] = useState<number[]>([])
+  const [showAlerts, setShowAlerts] = useState(false)
+  const [incomeDaily, setIncomeDaily] = useState<number[]>([])
+  const [expenseDaily, setExpenseDaily] = useState<number[]>([])
+  const [yearlySteps, setYearlySteps] = useState<{ label: string; delta: number; isTotal: boolean; color: string }[]>([])
+  const [chartWidth, setChartWidth] = useState(320)
+  const [showAllCategories, setShowAllCategories] = useState(false)
 
   const safeFormatCurrency = (amount: number) => {
     try {
       return formatCurrency(amount, language)
     } catch {
+      
       const prefix = language === 'pt-BR' ? 'R$ ' : '$'
       return `${prefix}${Number(amount || 0).toFixed(2)}`
     }
@@ -100,6 +113,15 @@ export default function DashboardScreen() {
         .eq('user_id', user?.id)
 
       if (!transactions) return
+
+      // Fetch upcoming bills (optional)
+      const nowISO = new Date().toISOString().split('T')[0]
+      const { data: bills } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('user_id', user?.id)
+        .gte('due_date', nowISO)
+        .eq('is_paid', false)
 
       // Calculate statistics based on time filter
       const now = new Date()
@@ -171,6 +193,7 @@ export default function DashboardScreen() {
         }
       })
 
+      const totalFilteredExpenses = Array.from(categoryMap.values()).reduce((s, v) => s + v, 0)
       const categoryData = Array.from(categoryMap.entries()).map(([categoryId, amount]) => {
         const category = transactions.find(t => t.category?.id === categoryId)?.category
         return {
@@ -178,8 +201,9 @@ export default function DashboardScreen() {
           amount,
           color: category?.color || '#666',
           icon: category?.icon || 'help-circle',
+          percent: totalFilteredExpenses > 0 ? (amount / totalFilteredExpenses) * 100 : 0,
         }
-      }).sort((a, b) => b.amount - a.amount).slice(0, 6)
+      }).sort((a, b) => b.amount - a.amount)
 
       setCategorySpending(categoryData)
 
@@ -205,6 +229,192 @@ export default function DashboardScreen() {
       }
       
       setTrends(trendsData)
+
+      // Advanced insights
+      const ai: { icon: string; color: string; text: string }[] = []
+
+      // 1) Category Overspend Alert (current month vs 3-month avg)
+      try {
+        const now = new Date()
+        const start3mo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
+        const endPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+        const currentMonthExpenses = new Map<string, number>()
+        const historyExpenses = new Map<string, { total: number; countMonths: number }>()
+
+        transactions.forEach(t => {
+          if (t.type !== 'expense' || !t.category) return
+          const d = new Date(t.transaction_date)
+          const key = t.category.name
+          if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+            currentMonthExpenses.set(key, (currentMonthExpenses.get(key) || 0) + parseFloat(t.amount))
+          } else if (d >= start3mo && d <= endPrevMonth) {
+            const rec = historyExpenses.get(key) || { total: 0, countMonths: 0 }
+            rec.total += parseFloat(t.amount)
+            historyExpenses.set(key, rec)
+          }
+        })
+
+        const overs = Array.from(currentMonthExpenses.entries())
+          .map(([cat, curr]) => {
+            const hist = historyExpenses.get(cat)
+            const avg = hist ? hist.total / Math.max(1, 3) : 0
+            const ratio = avg > 0 ? curr / avg : 0
+            return { cat, curr, avg, ratio }
+          })
+          .filter(x => x.avg > 0 && x.curr > x.avg * 1.3 && x.curr > 50)
+          .sort((a, b) => b.ratio - a.ratio)
+          .slice(0, 2)
+
+        const alertData: { category: string; pct: number; amount: number }[] = []
+        overs.forEach(o => {
+          const pct = Math.round((o.curr / o.avg - 1) * 100)
+          alertData.push({ category: o.cat, pct, amount: o.curr })
+        })
+        setOverspendAlerts(alertData)
+      } catch {}
+
+      // 2) Subscription Identification (recurring merchants)
+      try {
+        const windowStart = new Date()
+        windowStart.setMonth(windowStart.getMonth() - 3)
+        const recent = transactions.filter(t => new Date(t.transaction_date) >= windowStart && t.type === 'expense')
+        const byDesc = new Map<string, { months: Set<string>; amounts: number[] }>()
+        recent.forEach(t => {
+          const desc = (t.description || '').trim()
+          if (!desc) return
+          const monthKey = t.transaction_date.slice(0, 7)
+          const entry = byDesc.get(desc) || { months: new Set<string>(), amounts: [] }
+          entry.months.add(monthKey)
+          entry.amounts.push(parseFloat(t.amount))
+          byDesc.set(desc, entry)
+        })
+        const recurring = Array.from(byDesc.entries()).filter(([_, v]) => v.months.size >= 2)
+        const stable = recurring.filter(([_, v]) => {
+          const mean = v.amounts.reduce((s, a) => s + a, 0) / v.amounts.length
+          const variance = v.amounts.reduce((s, a) => s + Math.pow(a - mean, 2), 0) / v.amounts.length
+          const stdev = Math.sqrt(variance)
+          return mean >= 10 && stdev <= mean * 0.2
+        })
+        const currentMonth = new Date().toISOString().slice(0, 7)
+        const burden = recent
+          .filter(t => (t.description || '').trim() && t.transaction_date.startsWith(currentMonth))
+          .filter(t => stable.some(([desc]) => desc === (t.description || '').trim()))
+          .reduce((s, t) => s + parseFloat(t.amount), 0)
+        if (stable.length > 0) {
+          const count = stable.length
+          const text = language === 'pt-BR'
+            ? `Identificadas ${count} assinaturas recorrentes. Custo mensal atual: ${safeFormatCurrency(burden)}.`
+            : `Detected ${count} recurring subscriptions. Current monthly burden: ${safeFormatCurrency(burden)}.`
+          ai.push({ icon: 'repeat', color: '#9B59B6', text })
+        }
+      } catch {}
+
+      // 3) Cashflow Projection Risk (rest of month) and daily waves
+      try {
+        const now = new Date()
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        const daysLeft = Math.max(0, Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        const weeksLeft = Math.max(0, Math.ceil(daysLeft / 7))
+
+        const last28 = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000)
+        const last4wExp = transactions.filter(t => new Date(t.transaction_date) >= last28 && t.type === 'expense')
+        const last4wInc = transactions.filter(t => new Date(t.transaction_date) >= last28 && t.type === 'income')
+        const expensesSum = last4wExp.reduce((s, t) => s + parseFloat(t.amount), 0)
+        const incomeSum = last4wInc.reduce((s, t) => s + parseFloat(t.amount), 0)
+        const avgWeeklyExpenses = expensesSum / 4
+        const avgDailyExpenses = avgWeeklyExpenses / 7
+        const avgDailyIncome = (incomeSum / 4) / 7
+
+        // Upcoming unpaid bills this month
+        const upcomingBills = (bills || []).filter(b => {
+          const d = new Date(b.due_date)
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && !b.is_paid
+        })
+        const upcomingBillsTotal = upcomingBills.reduce((s, b) => s + parseFloat(b.amount || 0), 0)
+
+        const start = stats.monthlyNet
+        const series: number[] = []
+        for (let d = 1; d <= daysLeft; d++) {
+          const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d)
+          const billsDue = (bills || []).filter(b => {
+            const bd = new Date(b.due_date)
+            return bd.getFullYear() === date.getFullYear() && bd.getMonth() === date.getMonth() && bd.getDate() === date.getDate() && !b.is_paid
+          }).reduce((s, b) => s + parseFloat(b.amount || 0), 0)
+          const prev = d === 1 ? start : series[d - 2]
+          series.push(prev + avgDailyIncome - avgDailyExpenses - billsDue)
+        }
+        setProjectionSeries(series)
+        const projection = series.length ? series[series.length - 1] : start
+        const text = projection < 0
+          ? (language === 'pt-BR'
+              ? `Risco de fluxo de caixa negativo até o fim do mês: ${safeFormatCurrency(projection)}. Considere reduzir despesas ou adiar compras.`
+              : `Projected negative cashflow by month‑end: ${safeFormatCurrency(projection)}. Consider reducing expenses or delaying purchases.`)
+          : (language === 'pt-BR'
+              ? `Fluxo de caixa projetado até o fim do mês: ${safeFormatCurrency(projection)}.`
+              : `Projected month‑end cashflow: ${safeFormatCurrency(projection)}.`)
+        ai.push({ icon: projection < 0 ? 'alert-circle' : 'calendar', color: projection < 0 ? '#FF6B6B' : '#4A90E2', text })
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        const daysInMonth = endOfMonth.getDate()
+        const incDaily: number[] = []
+        const expDaily: number[] = []
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = new Date(now.getFullYear(), now.getMonth(), day).toISOString().split('T')[0]
+          const dayTransactions = transactions.filter(t => t.transaction_date === dateStr)
+          const inc = dayTransactions.filter(t => t.type === 'income').reduce((s, t) => s + parseFloat(t.amount), 0)
+          const exp = dayTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0)
+          if (day <= now.getDate()) {
+            incDaily.push(inc)
+            expDaily.push(exp)
+          } else {
+            const billsDueFuture = (bills || []).filter(b => {
+              const bd = new Date(b.due_date)
+              return bd.getFullYear() === now.getFullYear() && bd.getMonth() === now.getMonth() && bd.getDate() === day && !b.is_paid
+            }).reduce((s, b) => s + parseFloat(b.amount || 0), 0)
+            incDaily.push(avgDailyIncome)
+            expDaily.push(avgDailyExpenses + billsDueFuture)
+          }
+        }
+        setIncomeDaily(incDaily)
+        setExpenseDaily(expDaily)
+      } catch {}
+
+      setAdvancedInsights(ai)
+
+      // Yearly waterfall steps (Start + months + End)
+      try {
+        const now = new Date()
+        const year = now.getFullYear()
+        const prevYear = year - 1
+        const prevYearNet = transactions
+          .filter(t => {
+            const d = new Date(t.transaction_date)
+            return d.getFullYear() === prevYear
+          })
+          .reduce((s, t) => s + (t.type === 'income' ? parseFloat(t.amount) : -parseFloat(t.amount)), 0)
+        const monthlyNet: { m: number; v: number }[] = Array.from({ length: 12 }, (_, m) => {
+          const mNet = transactions
+            .filter(t => {
+              const d = new Date(t.transaction_date)
+              return d.getFullYear() === year && d.getMonth() === m
+            })
+            .reduce((s, t) => s + (t.type === 'income' ? parseFloat(t.amount) : -parseFloat(t.amount)), 0)
+          return { m, v: mNet }
+        })
+        const monthsEN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+        const monthsPT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        const labels = language === 'pt-BR' ? monthsPT : monthsEN
+        const stepsArr: { label: string; delta: number; isTotal: boolean; color: string }[] = []
+        stepsArr.push({ label: language === 'pt-BR' ? 'Começo' : 'Start', delta: prevYearNet, isTotal: true, color: '#4A90E2' })
+        monthlyNet
+          .filter(x => x.v !== 0)
+          .forEach(({ m, v }) => {
+            stepsArr.push({ label: labels[m], delta: v, isTotal: false, color: v >= 0 ? '#50C878' : '#FF6B6B' })
+          })
+        const yearEnd = prevYearNet + monthlyNet.reduce((s, x) => s + x.v, 0)
+        stepsArr.push({ label: language === 'pt-BR' ? 'Fim' : 'End', delta: yearEnd, isTotal: true, color: '#4A90E2' })
+        setYearlySteps(stepsArr)
+      } catch {}
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
@@ -241,15 +451,15 @@ export default function DashboardScreen() {
 
   const CategoryItem = ({ item }: { item: CategorySpending }) => (
     <View style={styles.categoryItem}>
-      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}>
+      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}> 
         <Ionicons name={item.icon as any} size={16} color={item.color} />
       </View>
       <View style={styles.categoryInfo}>
         <Text style={styles.categoryName}>{item.category}</Text>
-        <Text style={styles.categoryAmount}>{safeFormatCurrency(item.amount)}</Text>
+        <Text style={styles.categoryAmount}>{safeFormatCurrency(item.amount)} • {Math.round(item.percent)}%</Text>
       </View>
       <View style={styles.categoryBar}>
-        <View style={[styles.categoryBarFill, { backgroundColor: item.color, width: '60%' }]} />
+        <View style={[styles.categoryBarFill, { backgroundColor: item.color, width: `${Math.min(100, Math.round(item.percent))}%` }]} />
       </View>
     </View>
   )
@@ -297,12 +507,6 @@ export default function DashboardScreen() {
         <Text style={styles.sectionTitle}>{t('dashboard.overview.title')}</Text>
         <View style={styles.statsGrid}>
           <StatCard
-            title={t('dashboard.stat.total_balance')}
-            amount={stats.netBalance}
-            color="#4A90E2"
-            icon="wallet"
-          />
-          <StatCard
             title={t('dashboard.stat.total_income')}
             amount={stats.totalIncome}
             color="#50C878"
@@ -313,6 +517,12 @@ export default function DashboardScreen() {
             amount={stats.totalExpenses}
             color="#FF6B6B"
             icon="trending-down"
+          />
+          <StatCard
+            title={t('dashboard.stat.total_balance')}
+            amount={stats.netBalance}
+            color="#4A90E2"
+            icon="wallet"
           />
         </View>
       </View>
@@ -368,12 +578,29 @@ export default function DashboardScreen() {
 
       {/* Category Spending */}
       <View style={styles.categorySection}>
-        <Text style={styles.sectionTitle}>{t('dashboard.category.title')}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.sectionTitle}>{t('dashboard.category.title')}</Text>
+          {!!categorySpending.length && (
+            <TouchableOpacity onPress={() => setShowAllCategories(prev => !prev)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#F0F0F0' }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#333' }}>
+                {showAllCategories ? (language === 'pt-BR' ? 'Colapsar' : 'Collapse') : (language === 'pt-BR' ? 'Ver todos' : 'See all')}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {categorySpending.length > 0 ? (
           <View style={styles.categoryContainer}>
-            {categorySpending.map((item, index) => (
-              <CategoryItem key={index} item={item} />
-            ))}
+            {!showAllCategories ? (
+              categorySpending.slice(0, 5).map((item, index) => (
+                <CategoryItem key={index} item={item} />
+              ))
+            ) : (
+              <ScrollView style={{ maxHeight: 280 }}>
+                {categorySpending.map((item, index) => (
+                  <CategoryItem key={index} item={item} />
+                ))}
+              </ScrollView>
+            )}
           </View>
         ) : (
           <View style={styles.emptyContainer}>
@@ -385,7 +612,12 @@ export default function DashboardScreen() {
 
       {/* Quick Insights */}
       <View style={styles.insightsSection}>
-        <Text style={styles.sectionTitle}>{t('dashboard.insights.title')}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.sectionTitle}>{t('dashboard.insights.title')}</Text>
+          <TouchableOpacity onPress={() => setShowAlerts(!showAlerts)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#F0F0F0' }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#333' }}>{language === 'pt-BR' ? 'Alertas' : 'Alerts'}</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.insightsContainer}>
           <View style={styles.insightItem}>
             <Ionicons name="trending-up" size={24} color="#50C878" />
@@ -405,8 +637,109 @@ export default function DashboardScreen() {
               }
             </Text>
           </View>
+          {advancedInsights.map((ins, idx) => (
+            <View key={idx} style={styles.insightItem}>
+              <Ionicons name={ins.icon as any} size={24} color={ins.color} />
+              <Text style={styles.insightText}>{ins.text}</Text>
+            </View>
+          ))}
         </View>
       </View>
+
+      {/* Alerts: Category Overspending */}
+      {showAlerts && overspendAlerts.length > 0 && (
+        <View style={styles.alertsSection}>
+          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Alertas de Gastos por Categoria' : 'Category Overspend Alerts'}</Text>
+          <View style={styles.alertsContainer}>
+            {overspendAlerts.map((a, i) => (
+              <View key={i} style={styles.alertCard}>
+                <View style={styles.alertHeader}>
+                  <Ionicons name="warning" size={20} color="#FF6B6B" />
+                  <Text style={[styles.alertTitle, { color: '#FF6B6B' }]}>{a.category}</Text>
+                </View>
+                <Text style={styles.alertBody}>
+                  {language === 'pt-BR'
+                    ? `Acima da média: ${a.pct}% • Este mês: ${safeFormatCurrency(a.amount)}`
+                    : `Above average: ${a.pct}% • This month: ${safeFormatCurrency(a.amount)}`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Cashflow Projection Chart */}
+      {yearlySteps.length > 0 && (
+        <View style={styles.projectionSection}>
+          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Fluxo de Caixa Anual (R$)' : 'Yearly Cashflow (R$)'}</Text>
+          <View style={styles.projectionCard} onLayout={(e) => setChartWidth(Math.max(240, Math.floor(e.nativeEvent.layout.width)))}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {(() => {
+              const pad = 24
+              const gap = 8
+              const barW = 32
+              const steps = yearlySteps
+              const neededWidth = pad * 2 + steps.length * barW + (steps.length - 1) * gap
+              const w = Math.max(chartWidth, neededWidth)
+              const h = 180
+              const cumul: number[] = []
+              steps.forEach((s, i) => {
+                if (i === 0) cumul.push(s.delta)
+                else if (s.isTotal) cumul.push(cumul[i - 1])
+                else cumul.push((cumul[i - 1] || 0) + s.delta)
+              })
+              const allVals = [0, ...cumul]
+              const minVal = Math.min(...allVals)
+              const maxVal = Math.max(...allVals)
+              const range = Math.max(1, maxVal - minVal)
+              return (
+                <Svg width={w} height={h}>
+                  <SvgLine x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#E0E0E0" strokeWidth={1} />
+                  <SvgLine x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#E0E0E0" strokeWidth={1} />
+                  {steps.map((s, i) => {
+                    const x = pad + i * (barW + gap)
+                    if (s.isTotal) {
+                      const y = pad + (1 - (s.delta - minVal) / range) * (h - 2 * pad)
+                      const height = Math.abs(((s.delta - minVal) / range) * (h - 2 * pad))
+                      return (
+                        <G key={`wf-${i}`}>
+                          <Rect x={x} y={y} width={barW} height={height} fill={s.color} />
+                          <SvgText x={x} y={h - pad + 12} fill="#666" fontSize={9}>{s.label}</SvgText>
+                          <SvgText x={x} y={y - 6} fill="#666" fontSize={10}>{String(parseFloat(s.delta.toFixed(2))).replaceAll(".",",")}</SvgText>
+                        </G>
+                      )
+                    } else {
+                      const prev = cumul[i - 1] || 0
+                      const curr = cumul[i] || 0
+                      const top = Math.max(prev, curr)
+                      const bottom = Math.min(prev, curr)
+                      const yTop = pad + (1 - (top - minVal) / range) * (h - 2 * pad)
+                      const yBottom = pad + (1 - (bottom - minVal) / range) * (h - 2 * pad)
+                      const height = Math.max(2, yBottom - yTop)
+                      return (
+                        <G key={`wf-${i}`}>
+                          <Rect x={x} y={yTop} width={barW} height={height} fill={s.color} />
+                          <SvgText x={x} y={h - pad + 12} fill="#666" fontSize={9}>{s.label}</SvgText>
+                          <SvgText x={x} y={yTop - 6} fill="#666" fontSize={10}>{String(parseFloat(s.delta.toFixed(2))).replaceAll(".",",")}</SvgText>
+                        </G>
+                      )
+                    }
+                  })}
+                </Svg>
+              )
+            })()}
+            </ScrollView>
+            <View style={styles.projectionFooter}>
+              <Ionicons name="calendar" size={18} color="#4A90E2" />
+              <Text style={styles.projectionText}>
+                {language === 'pt-BR'
+                  ? 'Fluxo de caixa anual por mês (valores acumulados)'
+                  : 'Yearly cashflow by month (cumulative values)'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
     </ScrollView>
   )
 }
@@ -608,6 +941,64 @@ const styles = StyleSheet.create({
   insightsSection: {
     paddingHorizontal: 24,
     paddingBottom: 40,
+  },
+  alertsSection: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  alertsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  alertCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+    paddingLeft: 12,
+  },
+  alertHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  alertBody: {
+    fontSize: 12,
+    color: '#666',
+  },
+  projectionSection: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  projectionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  projectionFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  projectionText: {
+    fontSize: 12,
+    color: '#333',
   },
   insightsContainer: {
     backgroundColor: '#fff',
