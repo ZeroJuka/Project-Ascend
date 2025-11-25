@@ -249,7 +249,7 @@ export default function TransactionsScreen() {
         })}
         renderItem={renderTransaction}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 60 + insets.bottom + 32 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshData} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>

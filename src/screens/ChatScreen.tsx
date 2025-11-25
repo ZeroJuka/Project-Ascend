@@ -393,7 +393,7 @@ export default function ChatScreen({ route }: any) {
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item, idx) => `${item.created_at}-${item.sender}-${idx}`}
-        contentContainerStyle={styles.messagesContainer}
+        contentContainerStyle={[styles.messagesContainer, { paddingBottom: 60 + insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchMessages(); setRefreshing(false) }} />}
         ListEmptyComponent={

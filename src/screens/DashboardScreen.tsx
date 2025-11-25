@@ -263,7 +263,11 @@ export default function DashboardScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchDashboardData(); setRefreshing(false) }} />}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 60 + insets.bottom + 32 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchDashboardData(); setRefreshing(false) }} />}
+    >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>{t('dashboard.header.title')}</Text>
