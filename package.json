@@ -21,8 +21,10 @@
     "expo-audio": "^1.0.14",
     "expo-av": "^16.0.7",
     "expo-constants": "^18.0.10",
+    "expo-device": "~8.0.10",
     "expo-file-system": "^19.0.17",
     "expo-linear-gradient": "^15.0.7",
+    "expo-notifications": "~0.32.16",
     "expo-speech": "^14.0.7",
     "expo-status-bar": "~3.0.8",
     "lucide-react-native": "^0.553.0",
@@ -37,8 +39,14 @@
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
+    "jest": "^29.7.0",
+    "jest-expo": "^54.0.16",
     "typescript": "~5.9.2"
+  },
+  "jest": {
+    "preset": "jest-expo"
   },
   "private": true
 }

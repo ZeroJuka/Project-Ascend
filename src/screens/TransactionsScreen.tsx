@@ -55,13 +55,15 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [categoryPickerTarget, setCategoryPickerTarget] = useState<'add' | 'edit' | 'filter'>('add')
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
-  const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null)
+  const [filterCategoryIds, setFilterCategoryIds] = useState<string[]>([])
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editTx, setEditTx] = useState<Transaction | null>(null)
   const [editAmount, setEditAmount] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editType, setEditType] = useState<'income' | 'expense'>('expense')
   const [editCategory, setEditCategory] = useState<Category | null>(null)
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const { user } = useAuth()
   const { t } = useI18n()
   const insets = useSafeAreaInsets()
@@ -143,25 +145,98 @@ export default function TransactionsScreen() {
     }
   }
 
+  const toggleSelection = (id: string) => {
+    setSelectedTransactionIds(prev => {
+      const newSelection = prev.includes(id) 
+        ? prev.filter(tid => tid !== id) 
+        : [...prev, id]
+      
+      // If no items selected, exit selection mode
+      if (newSelection.length === 0) {
+        setIsSelectionMode(false)
+      }
+      return newSelection
+    })
+  }
+
+  const deleteSelectedTransactions = () => {
+    const message = t('transactions.alert.delete_selected_confirm').replace('{count}', String(selectedTransactionIds.length))
+    
+    Alert.alert(
+      t('common.delete'),
+      message === 'transactions.alert.delete_selected_confirm' 
+        ? `Delete ${selectedTransactionIds.length} transactions?` 
+        : message,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('transactions')
+                .delete()
+                .in('id', selectedTransactionIds)
+              
+              if (error) throw error
+              
+              setSelectedTransactionIds([])
+              setIsSelectionMode(false)
+              fetchTransactions()
+            } catch (error) {
+              console.error('Error deleting transactions:', error)
+              Alert.alert('Error', 'Failed to delete transactions')
+            }
+          }
+        }
+      ]
+    )
+  }
+
   const renderTransaction = ({ item, index }: { item: Transaction, index: number }) => {
     const currentDate = new Date(item.transaction_date)
     const currentKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`
     const prev = transactions[index - 1]
     const showMonthHeader = index === 0 || (prev && (`${new Date(prev.transaction_date).getFullYear()}-${String(new Date(prev.transaction_date).getMonth()+1).padStart(2,'0')}` !== currentKey))
     const monthTitle = new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric' }).format(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+    const isSelected = selectedTransactionIds.includes(item.id)
+
     return (
     <View>
       {showMonthHeader && (
         <View style={styles.sectionHeader}><Text style={styles.sectionHeaderText}>{monthTitle}</Text></View>
       )}
-      <TouchableOpacity style={styles.transactionItem} onPress={() => {
-        setEditTx(item)
-        setEditAmount(String(item.amount))
-        setEditDescription(item.description)
-        setEditType(item.type)
-        setEditCategory(categories.find(c => c.name === item.category?.name) || null)
-        setEditModalVisible(true)
-      }}>
+      <TouchableOpacity 
+        style={[
+          styles.transactionItem,
+          isSelected && styles.transactionItemSelected
+        ]} 
+        onPress={() => {
+          if (isSelectionMode) {
+            toggleSelection(item.id)
+          } else {
+            setEditTx(item)
+            setEditAmount(String(item.amount))
+            setEditDescription(item.description)
+            setEditType(item.type)
+            setEditCategory(categories.find(c => c.name === item.category?.name) || null)
+            setEditModalVisible(true)
+          }
+        }}
+        onLongPress={() => {
+          if (!isSelectionMode) {
+            setIsSelectionMode(true)
+            toggleSelection(item.id)
+          }
+        }}
+        delayLongPress={300}
+      >
+        {isSelectionMode && (
+          <View style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+          </View>
+        )}
       <View style={[styles.categoryIcon, { backgroundColor: item.category.color + '20' }]}> 
         <Ionicons name={item.category.icon as any} size={20} color={item.category.color} />
       </View>
@@ -180,11 +255,48 @@ export default function TransactionsScreen() {
     )
   }
 
+  const deleteCategory = async (category: Category) => {
+    if (category.is_default) {
+      Alert.alert(t('common.error'), t('categories.alert.delete_default'))
+      return
+    }
+
+    Alert.alert(
+      t('categories.alert.delete_title'),
+      t('categories.alert.delete_message').replace('{name}', category.name),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('id', category.id)
+
+              if (error) throw error
+              
+              setCategories(prev => prev.filter(c => c.id !== category.id))
+              if (selectedCategory?.id === category.id) setSelectedCategory(null)
+              Alert.alert(t('common.success'), t('categories.alert.delete_success'))
+            } catch (error) {
+              console.error('Error deleting category:', error)
+              Alert.alert(t('common.error'), t('categories.alert.delete_error'))
+            }
+          }
+        }
+      ]
+    )
+  }
+
   const renderCategory = ({ item }: { item: Category }) => (
     <TouchableOpacity
       style={[
-        styles.categoryItem,
-        selectedCategory?.id === item.id && styles.categoryItemSelected
+        styles.categoryItemCompact,
+        selectedCategory?.id === item.id && styles.categoryItemCompactSelected,
+        { borderColor: item.color + '40', backgroundColor: selectedCategory?.id === item.id ? item.color + '10' : '#fff' }
       ]}
       onPress={() => {
         if (categoryPickerTarget === 'add') {
@@ -192,28 +304,53 @@ export default function TransactionsScreen() {
         } else if (categoryPickerTarget === 'edit') {
           setEditCategory(item)
         } else {
-          setFilterCategoryId(item.id)
+          setFilterCategoryIds(prev => {
+             if (prev.includes(item.id)) return prev.filter(id => id !== item.id)
+             return [...prev, item.id]
+          })
         }
-        setCategoryModalVisible(false)
+        if (categoryPickerTarget !== 'filter') setCategoryModalVisible(false)
       }}
+      onLongPress={() => deleteCategory(item)}
+      delayLongPress={500}
     >
-      <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}> 
-        <Ionicons name={item.icon as any} size={20} color={item.color} />
+      <View style={[styles.categoryIconCompact, { backgroundColor: item.color + '20' }]}> 
+        <Ionicons name={item.icon as any} size={18} color={item.color} />
       </View>
-      <Text style={styles.categoryName}>{item.name}</Text>
+      <Text style={styles.categoryNameCompact} numberOfLines={1}>{item.name}</Text>
+      {!item.is_default && (
+         <Ionicons name="trash-outline" size={14} color="#FF6B6B" style={{ opacity: 0.5 }} />
+      )}
     </TouchableOpacity>
   )
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Text style={styles.title}>{t('transactions.title')}</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
+        {isSelectionMode ? (
+          <View style={styles.selectionHeader}>
+            <TouchableOpacity onPress={() => {
+              setIsSelectionMode(false)
+              setSelectedTransactionIds([])
+            }}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.selectionTitle}>{selectedTransactionIds.length} Selected</Text>
+            <TouchableOpacity onPress={deleteSelectedTransactions}>
+              <Ionicons name="trash-outline" size={24} color="#FF6B6B" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>{t('transactions.title')}</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <View style={styles.filtersRow}>
@@ -231,20 +368,51 @@ export default function TransactionsScreen() {
           ))}
         </View>
         <TouchableOpacity style={styles.categoryFilter} onPress={() => { setCategoryPickerTarget('filter'); setCategoryModalVisible(true) }}>
-          <Text style={styles.categoryFilterText}>{t('transactions.filters.category')}</Text>
+          <Ionicons name="filter" size={16} color="#666" style={{ marginRight: 4 }} />
+          <Text style={styles.categoryFilterText}>
+            {filterCategoryIds.length > 0 ? `${filterCategoryIds.length} ${t('transactions.filters.category')}` : t('transactions.filters.category')}
+          </Text>
           <Ionicons name="chevron-down" size={16} color="#666" />
         </TouchableOpacity>
-        {!!filterCategoryId && (
-          <TouchableOpacity style={styles.clearFilter} onPress={() => setFilterCategoryId(null)}>
-            <Text style={styles.clearFilterText}>{t('transactions.filters.clear')}</Text>
-          </TouchableOpacity>
-        )}
       </View>
+
+      {/* Active Filters Area */}
+      {(filterType !== 'all' || filterCategoryIds.length > 0) && (
+        <View style={styles.activeFiltersRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+            
+            {filterType !== 'all' && (
+              <TouchableOpacity style={styles.activeFilterChip} onPress={() => setFilterType('all')}>
+                <Text style={styles.activeFilterText}>
+                  {filterType === 'income' ? t('transactions.filters.type_income') : t('transactions.filters.type_expense')}
+                </Text>
+                <Ionicons name="close-circle" size={16} color="#4A90E2" />
+              </TouchableOpacity>
+            )}
+            
+            {filterCategoryIds.map(catId => {
+              const cat = categories.find(c => c.id === catId)
+              if (!cat) return null
+              return (
+                <TouchableOpacity key={catId} style={styles.activeFilterChip} onPress={() => setFilterCategoryIds(prev => prev.filter(id => id !== catId))}>
+                  <Text style={styles.activeFilterText}>{cat.name}</Text>
+                  <Ionicons name="close-circle" size={16} color="#4A90E2" />
+                </TouchableOpacity>
+              )
+            })}
+
+            <TouchableOpacity style={styles.clearAllButton} onPress={() => { setFilterType('all'); setFilterCategoryIds([]) }}>
+              <Text style={styles.clearAllText}>{t('transactions.filters.clear')}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={transactions.filter(t => {
           if (filterType !== 'all' && t.type !== filterType) return false
-          if (filterCategoryId && (t as any).category?.id !== filterCategoryId) return false
+          if (filterCategoryIds.length > 0 && !(t as any).category?.id) return false
+          if (filterCategoryIds.length > 0 && !filterCategoryIds.includes((t as any).category.id)) return false
           return true
         })}
         renderItem={renderTransaction}
@@ -489,7 +657,9 @@ export default function TransactionsScreen() {
               data={categories}
               renderItem={renderCategory}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.categoryList}
+              contentContainerStyle={styles.categoryListGrid}
+              numColumns={2}
+              columnWrapperStyle={{ gap: 12 }}
               ListFooterComponent={(
                 <TouchableOpacity
                   style={styles.createCategoryButton}
@@ -717,12 +887,62 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  filtersContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingBottom: 12,
+  },
+  filterControls: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  controlsScroll: {
+    flexGrow: 0,
+  },
   filtersRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 24,
     marginBottom: 8,
+  },
+  activeFiltersRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  activeFiltersLabel: {
+    fontSize: 12,
+    color: '#999',
+    marginRight: 8,
+  },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EAF2FD',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+  },
+  activeFilterText: {
+    fontSize: 12,
+    color: '#4A90E2',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  clearAllButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  clearAllText: {
+    fontSize: 12,
+    color: '#666',
+    textDecorationLine: 'underline',
   },
   typeSelectorInline: {
     flexDirection: 'row',
@@ -783,24 +1003,36 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-  categoryList: {
+  categoryListGrid: {
     paddingHorizontal: 24,
     paddingVertical: 20,
   },
-  categoryItem: {
+  categoryItemCompact: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 0,
+    maxWidth: '48%',
+  },
+  categoryItemCompactSelected: {
+    borderWidth: 2,
+  },
+  categoryIconCompact: {
+    width: 28,
+    height: 28,
     borderRadius: 8,
-    marginBottom: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
-  categoryItemSelected: {
-    backgroundColor: '#F0F8FF',
-  },
-  categoryName: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
+  categoryNameCompact: {
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
   createCategoryButton: {
     flexDirection: 'row',
@@ -816,5 +1048,35 @@ const styles = StyleSheet.create({
     color: '#4A90E2',
     marginLeft: 8,
     fontWeight: '600',
+  },
+  transactionItemSelected: {
+    backgroundColor: '#F0F8FF',
+    borderColor: '#4A90E2',
+    borderWidth: 1,
+  },
+  checkboxContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#4A90E2',
+    borderColor: '#4A90E2',
+  },
+  selectionHeader: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
   },
 })

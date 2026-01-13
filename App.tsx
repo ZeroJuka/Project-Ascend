@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { StatusBar } from 'expo-status-bar'
@@ -9,12 +9,26 @@ import BottomTabNavigator from './src/navigation/BottomTabNavigator'
 import AuthScreen from './src/screens/AuthScreen'
 import ChatScreen from './src/screens/ChatScreen'
 import UserScreen from './src/screens/UserScreen'
+import { setupNotifications } from './src/services/Notifications'
+
+import { LogBox } from 'react-native'
+
+// Ignore specific logs
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+  '[expo-av]: Expo AV has been deprecated',
+])
 
 const Stack = createNativeStackNavigator()
 
 function AppNavigator() {
   const { user, loading } = useAuth()
   const { theme } = useSettings()
+
+  useEffect(() => {
+    setupNotifications()
+  }, [])
 
   if (loading) {
     return null // Or a loading screen

@@ -49,7 +49,7 @@ export default function HomeScreen() {
       // Fetch all transactions for the user
       const { data: transactions } = await supabase
         .from('transactions')
-        .select('*')
+        .select('*, category:categories(*)')
         .eq('user_id', user?.id)
 
       // Calculate totals
@@ -127,16 +127,17 @@ export default function HomeScreen() {
 
     // Top spending category
     const expensesByCategory = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((acc, t) => {
-        acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount)
+      .filter(t => t.type === 'expense' && t.category)
+      .reduce((acc: {[key: string]: number}, t) => {
+        const catName = t.category?.name || 'Uncategorized'
+        acc[catName] = (acc[catName] || 0) + parseFloat(t.amount)
         return acc
       }, {})
     
     const topCategory = Object.entries(expensesByCategory)
       .sort(([,a], [,b]) => (b as number) - (a as number))[0]
     
-    if (topCategory) {
+    if (topCategory && (topCategory[1] as number) > 0) {
       insights.push({
         id: 'top-category',
         title: 'Top Spending Category',
@@ -156,6 +157,12 @@ export default function HomeScreen() {
       icon: 'add-circle',
       color: '#4A90E2',
       onPress: () => navigation.navigate('Transactions' as never),
+    },
+    {
+      title: t('home.action.shopping_list'),
+      icon: 'list',
+      color: '#9B59B6',
+      onPress: () => (navigation.navigate as any)('Chat', { openShoppingList: true }),
     },
     {
       title: t('home.action.view_goals'),
