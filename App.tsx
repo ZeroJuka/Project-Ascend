@@ -9,7 +9,16 @@ import BottomTabNavigator from './src/navigation/BottomTabNavigator'
 import AuthScreen from './src/screens/AuthScreen'
 import ChatScreen from './src/screens/ChatScreen'
 import UserScreen from './src/screens/UserScreen'
-import { registerForPushNotificationsAsync } from './src/services/Notifications'
+import { setupNotifications } from './src/services/Notifications'
+
+import { LogBox } from 'react-native'
+
+// Ignore specific logs
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+  '[expo-av]: Expo AV has been deprecated',
+])
 
 const Stack = createNativeStackNavigator()
 
@@ -18,7 +27,7 @@ function AppNavigator() {
   const { theme } = useSettings()
 
   useEffect(() => {
-    registerForPushNotificationsAsync()
+    setupNotifications()
   }, [])
 
   if (loading) {
