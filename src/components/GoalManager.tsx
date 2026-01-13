@@ -11,7 +11,6 @@ import {
   Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { supabase } from '../lib/supabase'
 
 interface Category {
@@ -26,11 +25,12 @@ interface GoalManagerProps {
   visible: boolean
   onClose: () => void
   onGoalCreated: (goal: any) => void
+  onGoalUpdated?: (goal: any) => void
   userId: string
+  initialGoal?: any
 }
 
-export default function GoalManager({ visible, onClose, onGoalCreated, userId }: GoalManagerProps) {
-  const [step, setStep] = useState<'basic' | 'categories' | 'budget'>('basic')
+export default function GoalManager({ visible, onClose, onGoalCreated, onGoalUpdated, userId, initialGoal }: GoalManagerProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [goalType, setGoalType] = useState<'spend_less' | 'spend_more' | 'save'>('spend_less')
@@ -45,8 +45,35 @@ export default function GoalManager({ visible, onClose, onGoalCreated, userId }:
   useEffect(() => {
     if (visible) {
       fetchCategories()
+      if (initialGoal) {
+        setTitle(initialGoal.title)
+        setDescription(initialGoal.description || '')
+        setGoalType(initialGoal.goal_type)
+        setTimePeriod(initialGoal.time_period)
+        setIsRecurring(initialGoal.is_recurring)
+        setMonthlyBudget(String(initialGoal.target_amount))
+        setBudgetResetDay(String(initialGoal.budget_reset_day || '1'))
+        // Fetch categories for this goal
+        fetchGoalCategories(initialGoal.id)
+      } else {
+        resetForm()
+      }
     }
-  }, [visible])
+  }, [visible, initialGoal])
+
+  const fetchGoalCategories = async (goalId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('goal_categories')
+        .select('category_id')
+        .eq('goal_id', goalId)
+
+      if (error) throw error
+      setSelectedCategories(data.map(gc => gc.category_id))
+    } catch (error) {
+      console.error('Error fetching goal categories:', error)
+    }
+  }
 
   const fetchCategories = async () => {
     try {
@@ -77,8 +104,8 @@ export default function GoalManager({ visible, onClose, onGoalCreated, userId }:
       return
     }
 
-    if (goalType === 'spend_less' && !monthlyBudget) {
-      Alert.alert('Error', 'Please set a monthly budget for spend less goals')
+    if (!monthlyBudget) {
+      Alert.alert('Error', 'Please set a target amount')
       return
     }
 
@@ -89,48 +116,91 @@ export default function GoalManager({ visible, onClose, onGoalCreated, userId }:
 
     setIsCreating(true)
     try {
-      // Create the goal
-      const { data: goal, error: goalError } = await supabase
-        .from('goals')
-        .insert({
-          user_id: userId,
-          title: title.trim(),
-          description: description.trim() || null,
-          target_amount: goalType === 'spend_less' ? parseFloat(monthlyBudget) : 0,
-          current_amount: 0,
-          goal_type: goalType,
-          time_period: timePeriod,
-          is_recurring: isRecurring,
-          start_date: new Date().toISOString().split('T')[0],
-          monthly_budget: goalType === 'spend_less' ? parseFloat(monthlyBudget) : null,
-          budget_reset_day: parseInt(budgetResetDay),
-        })
-        .select()
-        .single()
+      if (initialGoal) {
+        // Update existing goal
+        const { data: goal, error: goalError } = await supabase
+          .from('goals')
+          .update({
+            title: title.trim(),
+            description: description.trim() || null,
+            target_amount: parseFloat(monthlyBudget),
+            goal_type: goalType,
+            time_period: timePeriod,
+            is_recurring: isRecurring,
+            monthly_budget: goalType !== 'save' ? parseFloat(monthlyBudget) : null,
+            budget_reset_day: parseInt(budgetResetDay),
+          })
+          .eq('id', initialGoal.id)
+          .select()
+          .single()
 
-      if (goalError) throw goalError
+        if (goalError) throw goalError
 
-      // Create goal-category relationships
-      if (selectedCategories.length > 0) {
-        const goalCategories = selectedCategories.map(categoryId => ({
-          goal_id: goal.id,
-          category_id: categoryId,
-        }))
+        // Update goal-category relationships
+        // First delete existing
+        await supabase.from('goal_categories').delete().eq('goal_id', initialGoal.id)
 
-        const { error: categoriesError } = await supabase
-          .from('goal_categories')
-          .insert(goalCategories)
+        // Then insert new ones
+        if (selectedCategories.length > 0) {
+          const goalCategories = selectedCategories.map(categoryId => ({
+            goal_id: goal.id,
+            category_id: categoryId,
+          }))
 
-        if (categoriesError) throw categoriesError
+          const { error: categoriesError } = await supabase
+            .from('goal_categories')
+            .insert(goalCategories)
+
+          if (categoriesError) throw categoriesError
+        }
+
+        if (onGoalUpdated) onGoalUpdated(goal)
+        Alert.alert('Success', 'Goal updated successfully!')
+      } else {
+        // Create new goal
+        const { data: goal, error: goalError } = await supabase
+          .from('goals')
+          .insert({
+            user_id: userId,
+            title: title.trim(),
+            description: description.trim() || null,
+            target_amount: parseFloat(monthlyBudget),
+            current_amount: 0,
+            goal_type: goalType,
+            time_period: timePeriod,
+            is_recurring: isRecurring,
+            start_date: new Date().toISOString().split('T')[0],
+            monthly_budget: goalType !== 'save' ? parseFloat(monthlyBudget) : null,
+            budget_reset_day: parseInt(budgetResetDay),
+          })
+          .select()
+          .single()
+
+        if (goalError) throw goalError
+
+        // Create goal-category relationships
+        if (selectedCategories.length > 0) {
+          const goalCategories = selectedCategories.map(categoryId => ({
+            goal_id: goal.id,
+            category_id: categoryId,
+          }))
+
+          const { error: categoriesError } = await supabase
+            .from('goal_categories')
+            .insert(goalCategories)
+
+          if (categoriesError) throw categoriesError
+        }
+
+        onGoalCreated(goal)
+        Alert.alert('Success', 'Goal created successfully!')
       }
-
-      onGoalCreated(goal)
-      resetForm()
+      
       onClose()
-      Alert.alert('Success', 'Goal created successfully!')
+      if (!initialGoal) resetForm()
     } catch (error) {
-      console.error('Error creating goal:', error)
-      Alert.alert('Error', 'Failed to create goal')
+      console.error('Error saving goal:', error)
+      Alert.alert('Error', 'Failed to save goal')
     } finally {
       setIsCreating(false)
     }
@@ -145,7 +215,6 @@ export default function GoalManager({ visible, onClose, onGoalCreated, userId }:
     setMonthlyBudget('')
     setBudgetResetDay('1')
     setSelectedCategories([])
-    setStep('basic')
   }
 
   const renderCategory = ({ item }: { item: Category }) => {
@@ -181,268 +250,188 @@ export default function GoalManager({ visible, onClose, onGoalCreated, userId }:
     >
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
-          {/* Progress Indicator */}
-          <View style={styles.progressIndicator}>
-            <View style={[
-              styles.progressStep,
-              step === 'basic' && styles.progressStepActive
-            ]} />
-            <View style={[
-              styles.progressStep,
-              step === 'categories' && styles.progressStepActive
-            ]} />
-            <View style={[
-              styles.progressStep,
-              step === 'budget' && styles.progressStepActive
-            ]} />
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{initialGoal ? 'Edit Goal' : 'Create Goal'}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
           </View>
 
-          {step === 'basic' && (
-            <>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create Goal</Text>
-                <TouchableOpacity onPress={onClose}>
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
+          <ScrollView style={styles.modalBody}>
+            {/* Title */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Goal Title</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Spend less on dining out"
+                value={title}
+                onChangeText={setTitle}
+                placeholderTextColor="#999"
+              />
+            </View>
 
-              <ScrollView style={styles.modalBody}>
-                {/* Title */}
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Goal Title</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g., Spend less on dining out"
-                    value={title}
-                    onChangeText={setTitle}
-                    placeholderTextColor="#999"
-                  />
-                </View>
+            {/* Description */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Description (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Add more details about your goal"
+                value={description}
+                onChangeText={setDescription}
+                placeholderTextColor="#999"
+                multiline
+              />
+            </View>
 
-                {/* Description */}
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Description (Optional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Add more details about your goal"
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholderTextColor="#999"
-                    multiline
-                  />
-                </View>
-
-                {/* Goal Type */}
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Goal Type</Text>
-                  <View style={styles.goalTypeContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.goalTypeButton,
-                        goalType === 'spend_less' && styles.goalTypeButtonSelected
-                      ]}
-                      onPress={() => setGoalType('spend_less')}
-                    >
-                      <Ionicons name="trending-down" size={20} color={goalType === 'spend_less' ? '#fff' : '#FF6B6B'} />
-                      <Text style={[
-                        styles.goalTypeText,
-                        goalType === 'spend_less' && styles.goalTypeTextSelected
-                      ]}>
-                        Spend Less
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.goalTypeButton,
-                        goalType === 'save' && styles.goalTypeButtonSelected
-                      ]}
-                      onPress={() => setGoalType('save')}
-                    >
-                      <Ionicons name="wallet" size={20} color={goalType === 'save' ? '#fff' : '#50C878'} />
-                      <Text style={[
-                        styles.goalTypeText,
-                        goalType === 'save' && styles.goalTypeTextSelected
-                      ]}>
-                        Save Money
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Time Period */}
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Time Period</Text>
-                  <View style={styles.pickerContainer}>
-                    {['daily', 'weekly', 'monthly', 'yearly'].map((period) => (
-                      <TouchableOpacity
-                        key={period}
-                        style={[
-                          styles.pickerOption,
-                          timePeriod === period && styles.pickerOptionSelected
-                        ]}
-                        onPress={() => setTimePeriod(period as any)}
-                      >
-                        <Text style={[
-                          styles.pickerOptionText,
-                          timePeriod === period && styles.pickerOptionTextSelected
-                        ]}>
-                          {period.charAt(0).toUpperCase() + period.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Next Button */}
+            {/* Goal Type */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Goal Type</Text>
+              <View style={styles.goalTypeContainer}>
                 <TouchableOpacity
-                  style={styles.nextButton}
-                  onPress={() => setStep('categories')}
+                  style={[
+                    styles.goalTypeButton,
+                    goalType === 'spend_less' && styles.goalTypeButtonSelected
+                  ]}
+                  onPress={() => setGoalType('spend_less')}
                 >
-                  <Text style={styles.nextButtonText}>Next: Select Categories</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </>
-          )}
-
-          {step === 'categories' && (
-            <>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setStep('basic')}>
-                  <Ionicons name="arrow-back" size={24} color="#666" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Select Categories</Text>
-                <TouchableOpacity onPress={onClose}>
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.modalBody}>
-                <Text style={styles.helperText}>
-                  Choose which categories this goal should track. For example, if your goal is to "Spend less on dining out", select the "Food & Dining" category.
-                </Text>
-
-                <FlatList
-                  data={categories}
-                  renderItem={renderCategory}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.categoryList}
-                  scrollEnabled={false}
-                />
-
-                <TouchableOpacity
-                  style={styles.nextButton}
-                  onPress={() => setStep('budget')}
-                  disabled={selectedCategories.length === 0}
-                >
-                  <Text style={styles.nextButtonText}>
-                    Next: Set Budget ({selectedCategories.length} selected)
+                  <Ionicons name="trending-down" size={20} color={goalType === 'spend_less' ? '#fff' : '#FF6B6B'} />
+                  <Text style={[
+                    styles.goalTypeText,
+                    goalType === 'spend_less' && styles.goalTypeTextSelected
+                  ]}>
+                    Spend Less
                   </Text>
                 </TouchableOpacity>
-              </ScrollView>
-            </>
-          )}
 
-          {step === 'budget' && (
-            <>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setStep('categories')}>
-                  <Ionicons name="arrow-back" size={24} color="#666" />
+                <TouchableOpacity
+                  style={[
+                    styles.goalTypeButton,
+                    goalType === 'spend_more' && styles.goalTypeButtonSelected
+                  ]}
+                  onPress={() => setGoalType('spend_more')}
+                >
+                  <Ionicons name="trending-up" size={20} color={goalType === 'spend_more' ? '#fff' : '#4A90E2'} />
+                  <Text style={[
+                    styles.goalTypeText,
+                    goalType === 'spend_more' && styles.goalTypeTextSelected
+                  ]}>
+                    Spend At Least
+                  </Text>
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>Set Budget</Text>
-                <TouchableOpacity onPress={onClose}>
-                  <Ionicons name="close" size={24} color="#666" />
+
+                <TouchableOpacity
+                  style={[
+                    styles.goalTypeButton,
+                    goalType === 'save' && styles.goalTypeButtonSelected
+                  ]}
+                  onPress={() => setGoalType('save')}
+                >
+                  <Ionicons name="wallet" size={20} color={goalType === 'save' ? '#fff' : '#50C878'} />
+                  <Text style={[
+                    styles.goalTypeText,
+                    goalType === 'save' && styles.goalTypeTextSelected
+                  ]}>
+                    Save Money
+                  </Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
-              <ScrollView style={styles.modalBody}>
-                {goalType === 'spend_less' && (
-                  <>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.label}>Monthly Budget Limit</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="e.g., 200"
-                        value={monthlyBudget}
-                        onChangeText={setMonthlyBudget}
-                        keyboardType="decimal-pad"
-                        placeholderTextColor="#999"
-                      />
-                      <Text style={styles.helperText}>
-                        Set a monthly spending limit for the selected categories. You'll get alerts when you approach this limit.
-                      </Text>
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.label}>Budget Reset Day</Text>
-                      <View style={styles.pickerContainer}>
-                        {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-                          <TouchableOpacity
-                            key={day}
-                            style={[
-                              styles.dayOption,
-                              budgetResetDay === day.toString() && styles.dayOptionSelected
-                            ]}
-                            onPress={() => setBudgetResetDay(day.toString())}
-                          >
-                            <Text style={[
-                              styles.dayOptionText,
-                              budgetResetDay === day.toString() && styles.dayOptionTextSelected
-                            ]}>
-                              {day}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                      <Text style={styles.helperText}>
-                        Your budget will reset on this day each month.
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-                {goalType === 'save' && (
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Monthly Savings Target</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g., 500"
-                      value={monthlyBudget}
-                      onChangeText={setMonthlyBudget}
-                      keyboardType="decimal-pad"
-                      placeholderTextColor="#999"
-                    />
-                    <Text style={styles.helperText}>
-                      Set a monthly savings target. We'll track your progress and help you stay on track.
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.checkboxContainer}>
+            {/* Time Period */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Time Period</Text>
+              <View style={styles.pickerContainer}>
+                {['daily', 'weekly', 'monthly', 'yearly'].map((period) => (
                   <TouchableOpacity
+                    key={period}
                     style={[
-                      styles.checkbox,
-                      isRecurring && styles.checkboxChecked
+                      styles.pickerOption,
+                      timePeriod === period && styles.pickerOptionSelected
                     ]}
-                    onPress={() => setIsRecurring(!isRecurring)}
+                    onPress={() => setTimePeriod(period as any)}
                   >
-                    {isRecurring && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    <Text style={[
+                      styles.pickerOptionText,
+                      timePeriod === period && styles.pickerOptionTextSelected
+                    ]}>
+                      {period.charAt(0).toUpperCase() + period.slice(1)}
+                    </Text>
                   </TouchableOpacity>
-                  <Text style={styles.checkboxLabel}>Recurring Goal</Text>
-                </View>
+                ))}
+              </View>
+            </View>
 
-                <TouchableOpacity
-                  style={styles.createButton}
-                  onPress={handleCreateGoal}
-                  disabled={isCreating}
-                >
-                  <Text style={styles.createButtonText}>
-                    {isCreating ? 'Creating...' : 'Create Goal'}
-                  </Text>
-                </TouchableOpacity>
+            {/* Amount */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>
+                {goalType === 'save' ? 'Target Savings Amount' : 'Target Spending Amount'}
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., 500"
+                value={monthlyBudget}
+                onChangeText={setMonthlyBudget}
+                keyboardType="decimal-pad"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            {/* Categories */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Categories</Text>
+              <Text style={styles.helperText}>
+                Select categories to track for this goal
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', paddingVertical: 4 }}>
+                  {categories.map(cat => (
+                    <TouchableOpacity 
+                      key={cat.id} 
+                      style={{ 
+                        alignItems: 'center', 
+                        marginRight: 16, 
+                        opacity: selectedCategories.includes(cat.id) ? 1 : 0.5 
+                      }}
+                      onPress={() => toggleCategorySelection(cat.id)}
+                    >
+                      <View style={{ 
+                        width: 48, height: 48, borderRadius: 24, 
+                        backgroundColor: cat.color + '20', 
+                        justifyContent: 'center', alignItems: 'center',
+                        borderWidth: selectedCategories.includes(cat.id) ? 2 : 0,
+                        borderColor: cat.color
+                      }}>
+                        <Ionicons name={cat.icon as any} size={24} color={cat.color} />
+                      </View>
+                      <Text style={{ fontSize: 10, marginTop: 4, color: '#333' }}>{cat.name}</Text>
+                    </TouchableOpacity>
+                  ))}
               </ScrollView>
-            </>
-          )}
+            </View>
+
+            {/* Recurring */}
+            <View style={styles.checkboxContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.checkbox,
+                  isRecurring && styles.checkboxChecked
+                ]}
+                onPress={() => setIsRecurring(!isRecurring)}
+              >
+                {isRecurring && <Ionicons name="checkmark" size={16} color="#fff" />}
+              </TouchableOpacity>
+              <Text style={styles.checkboxLabel}>Recurring Goal</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={handleCreateGoal}
+              disabled={isCreating}
+            >
+              <Text style={styles.createButtonText}>
+                {isCreating ? 'Saving...' : (initialGoal ? 'Update Goal' : 'Create Goal')}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -459,23 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
-  },
-  progressIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  progressStep: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    marginHorizontal: 4,
-  },
-  progressStepActive: {
-    backgroundColor: '#4A90E2',
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -496,10 +469,9 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   helperText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
-    marginBottom: 20,
-    lineHeight: 20,
+    marginBottom: 8,
   },
   inputContainer: {
     marginBottom: 20,
@@ -522,28 +494,28 @@ const styles = StyleSheet.create({
   },
   goalTypeContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   goalTypeButton: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#E0E0E0',
-    marginHorizontal: 4,
   },
   goalTypeButtonSelected: {
     backgroundColor: '#4A90E2',
     borderColor: '#4A90E2',
   },
   goalTypeText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
-    marginLeft: 8,
+    marginTop: 4,
     fontWeight: '500',
+    textAlign: 'center',
   },
   goalTypeTextSelected: {
     color: '#fff',
@@ -552,6 +524,7 @@ const styles = StyleSheet.create({
   pickerContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 8,
   },
   pickerOption: {
     paddingHorizontal: 16,
@@ -559,35 +532,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    margin: 4,
   },
   pickerOptionSelected: {
     backgroundColor: '#4A90E2',
     borderColor: '#4A90E2',
   },
   pickerOptionText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
   },
   pickerOptionTextSelected: {
     color: '#fff',
     fontWeight: '600',
-  },
-  nextButton: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  nextButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  categoryList: {
-    paddingBottom: 20,
   },
   categoryItem: {
     flexDirection: 'row',
@@ -622,28 +578,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dayOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 4,
-  },
-  dayOptionSelected: {
-    backgroundColor: '#4A90E2',
-    borderColor: '#4A90E2',
-  },
-  dayOptionText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  dayOptionTextSelected: {
-    color: '#fff',
-    fontWeight: '600',
-  },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,9 +589,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 2,
     borderColor: '#E0E0E0',
+    marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   checkboxChecked: {
     backgroundColor: '#4A90E2',

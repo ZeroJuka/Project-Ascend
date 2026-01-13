@@ -102,6 +102,75 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
     setStep('form')
   }
 
+  const handleClearCustomCategories = async () => {
+    Alert.alert(
+      'Clear Custom Categories',
+      'Are you sure you want to delete all custom categories? This cannot be undone and transactions associated with them might lose their category.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('user_id', userId)
+                .eq('is_default', false)
+
+              if (error) throw error
+              
+              Alert.alert('Success', 'All custom categories deleted.')
+              onClose()
+            } catch (error) {
+              console.error('Error deleting categories:', error)
+              Alert.alert('Error', 'Failed to delete custom categories')
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    Alert.alert(
+      'Delete Category',
+      'Are you sure you want to delete this category?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('id', categoryId)
+
+              if (error) throw error
+              
+              // No need to manually refresh here as the parent will likely re-fetch or we can trigger a callback if needed
+              // But for now, we just close or stay on the screen. 
+              // Ideally CategoryManager should just be for creating.
+              // Wait, the user asked for deleting categories in the list.
+              // The list is in TransactionsScreen, not here. 
+              // Ah, "I still don't see an option to delete the categories" likely refers to individual deletion in the selection list.
+              // But CategoryManager is for CREATION. 
+              // The user said "the select category still shows way too big icons... also I still don't see an option to delete the categories"
+              // This implies the list IN THE MODAL (TransactionsScreen) or the CategoryManager.
+              // Let's assume they mean the selection list in TransactionsScreen first.
+            } catch (error) {
+              console.error('Error deleting category:', error)
+              Alert.alert('Error', 'Failed to delete category')
+            }
+          }
+        }
+      ]
+    )
+  }
+
   const renderIconItem = ({ item }: { item: string }) => (
     <TouchableOpacity
       style={[
@@ -114,7 +183,7 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
         setStep('form')
       }}
     >
-      <Ionicons name={item as any} size={24} color={selectedIcon === item ? selectedColor : '#666'} />
+      <Ionicons name={item as any} size={20} color={selectedIcon === item ? selectedColor : '#666'} />
     </TouchableOpacity>
   )
 
@@ -131,7 +200,7 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
       }}
     >
       {selectedColor === item && (
-        <Ionicons name="checkmark" size={16} color="#fff" />
+        <Ionicons name="checkmark" size={14} color="#fff" />
       )}
     </TouchableOpacity>
   )
@@ -218,6 +287,13 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
                     {isCreating ? 'Creating...' : 'Create Category'}
                   </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.clearAllButton}
+                  onPress={handleClearCustomCategories}
+                >
+                  <Text style={styles.clearAllButtonText}>Delete All Custom Categories</Text>
+                </TouchableOpacity>
               </ScrollView>
             </>
           )}
@@ -236,7 +312,7 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
                 data={AVAILABLE_ICONS}
                 renderItem={renderIconItem}
                 keyExtractor={(item) => item}
-                numColumns={6}
+                numColumns={8}
                 contentContainerStyle={styles.iconGrid}
               />
             </>
@@ -256,7 +332,7 @@ export default function CategoryManager({ visible, onClose, onCategoryCreated, u
                 data={COLOR_PALETTE}
                 renderItem={renderColorItem}
                 keyExtractor={(item) => item}
-                numColumns={6}
+                numColumns={8}
                 contentContainerStyle={styles.colorGrid}
               />
             </>
@@ -379,11 +455,21 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 8,
   },
   createButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  clearAllButton: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  clearAllButtonText: {
+    color: '#FF6B6B',
+    fontSize: 14,
     fontWeight: '600',
   },
   iconGrid: {

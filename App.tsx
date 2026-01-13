@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { StatusBar } from 'expo-status-bar'
@@ -9,12 +9,17 @@ import BottomTabNavigator from './src/navigation/BottomTabNavigator'
 import AuthScreen from './src/screens/AuthScreen'
 import ChatScreen from './src/screens/ChatScreen'
 import UserScreen from './src/screens/UserScreen'
+import { registerForPushNotificationsAsync } from './src/services/Notifications'
 
 const Stack = createNativeStackNavigator()
 
 function AppNavigator() {
   const { user, loading } = useAuth()
   const { theme } = useSettings()
+
+  useEffect(() => {
+    registerForPushNotificationsAsync()
+  }, [])
 
   if (loading) {
     return null // Or a loading screen

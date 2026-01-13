@@ -46,6 +46,15 @@ interface TransactionTrend {
   expenses: number
 }
 
+interface Notification {
+  id: string
+  title: string
+  message: string
+  type: 'info' | 'warning' | 'error' | 'success'
+  date: string
+  read: boolean
+}
+
 export default function DashboardScreen() {
   const [stats, setStats] = useState<FinancialStats>({
     totalIncome: 0,
@@ -77,6 +86,9 @@ export default function DashboardScreen() {
   const [yearlySteps, setYearlySteps] = useState<{ label: string; delta: number; isTotal: boolean; color: string }[]>([])
   const [chartWidth, setChartWidth] = useState(320)
   const [showAllCategories, setShowAllCategories] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(new Set())
 
   const safeFormatCurrency = (amount: number) => {
     try {
@@ -98,6 +110,44 @@ export default function DashboardScreen() {
       fetchDashboardData()
     }
   }, [isFocused])
+
+  useEffect(() => {
+    const newNotifications: Notification[] = []
+    
+    overspendAlerts.forEach(alert => {
+        const id = `overspend-${alert.category}-${new Date().getMonth()}`
+        if (!dismissedAlertIds.has(id)) {
+          newNotifications.push({
+            id,
+            title: language === 'pt-BR' ? `Alerta de Gastos: ${alert.category}` : `Spending Alert: ${alert.category}`,
+            message: language === 'pt-BR' 
+              ? `Você gastou ${alert.pct}% a mais que a média em ${alert.category} este mês.`
+              : `You spent ${alert.pct}% more than average on ${alert.category} this month.`,
+            type: 'warning',
+            date: new Date().toISOString(),
+            read: false
+          })
+        }
+    })
+
+    advancedInsights.forEach((insight, index) => {
+        if (insight.color === '#FF6B6B') {
+           const id = `insight-${index}-${new Date().getDate()}`
+           if (!dismissedAlertIds.has(id)) {
+             newNotifications.push({
+               id,
+               title: language === 'pt-BR' ? 'Alerta Financeiro' : 'Financial Alert',
+               message: insight.text,
+               type: 'warning',
+               date: new Date().toISOString(),
+               read: false
+             })
+           }
+        }
+    })
+    
+    setNotifications(newNotifications)
+  }, [overspendAlerts, advancedInsights, dismissedAlertIds])
 
   const fetchDashboardData = async () => {
     try {
@@ -765,7 +815,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 16,
   },
   filterContainer: {
     flexDirection: 'row',
