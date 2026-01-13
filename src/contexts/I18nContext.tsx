@@ -19,12 +19,19 @@ const en: Dict = {
   'home.expenses': 'Expenses',
   'home.net': 'Net',
   'home.action.add_transaction': 'Add Transaction',
+  'home.action.shopping_list': 'Shopping List',
   'home.action.view_goals': 'View Goals',
   'home.action.analytics': 'Analytics',
 
   'chat.title': 'ASCEND AI Assistant',
   'chat.subtitle': 'Ask me about your finances',
   'chat.placeholder': 'Ask about your finances...',
+  'chat.shopping_list.amount_placeholder': 'Cost (US$)',
+  'chat.shopping_list.item_placeholder': 'Item Name',
+  'chat.shopping_list.add_button': 'Add Item',
+  'chat.shopping_list.remove_button': 'Remove Item',
+  'chat.shopping_list.process_button': 'Process List',
+  'chat.shopping_list.title': 'Shopping List',
 
   'user.title': 'User & App Settings',
   'user.name': 'Display Name',
@@ -113,7 +120,7 @@ const en: Dict = {
   'bills.add_title': 'Add Bill',
   'bills.title': 'Title',
   'bills.amount': 'Amount',
-  'bills.due_date': 'Due Date (YYYY-MM-DD)',
+  'bills.due_date': 'Due Date',
   'bills.frequency': 'Frequency',
   'bills.category': 'Category',
   'bills.add_button': 'Add Bill',
@@ -144,6 +151,7 @@ const en: Dict = {
   'dashboard.insights.saving_negative': 'Consider reducing expenses this month',
   'dashboard.insights.balance_positive': 'Your overall balance is positive',
   'dashboard.insights.balance_negative': 'Focus on increasing income or reducing expenses',
+
 }
 
 const pt: Dict = {
@@ -162,12 +170,19 @@ const pt: Dict = {
   'home.expenses': 'Despesas',
   'home.net': 'Saldo',
   'home.action.add_transaction': 'Adicionar Transação',
+  'home.action.shopping_list': 'Lista de Compras',
   'home.action.view_goals': 'Ver Metas',
   'home.action.analytics': 'Análises',
 
   'chat.title': 'Assistente IA ASCEND',
   'chat.subtitle': 'Pergunte sobre suas finanças',
   'chat.placeholder': 'Pergunte sobre suas finanças...',
+  'chat.shopping_list.amount_placeholder': 'Custo (R$)',
+  'chat.shopping_list.item_placeholder': 'Nome do Item',
+  'chat.shopping_list.add_button': 'Adicionar Item',
+  'chat.shopping_list.remove_button': 'Remover Item',
+  'chat.shopping_list.process_button': 'Processar Lista',
+  'chat.shopping_list.title': 'Lista de Compras',
 
   'user.title': 'Configurações do Usuário e do App',
   'user.name': 'Nome de Exibição',
@@ -256,7 +271,7 @@ const pt: Dict = {
   'bills.add_title': 'Adicionar Conta',
   'bills.title': 'Título',
   'bills.amount': 'Valor',
-  'bills.due_date': 'Vencimento (AAAA-MM-DD)',
+  'bills.due_date': 'Vencimento',
   'bills.frequency': 'Frequência',
   'bills.category': 'Categoria',
   'bills.add_button': 'Adicionar Conta',

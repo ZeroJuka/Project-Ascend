@@ -159,6 +159,12 @@ export default function HomeScreen() {
       onPress: () => navigation.navigate('Transactions' as never),
     },
     {
+      title: t('home.action.shopping_list'),
+      icon: 'list',
+      color: '#9B59B6',
+      onPress: () => (navigation.navigate as any)('Chat', { openShoppingList: true }),
+    },
+    {
       title: t('home.action.view_goals'),
       icon: 'trophy',
       color: '#50C878',

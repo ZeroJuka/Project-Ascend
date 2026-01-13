@@ -374,18 +374,12 @@ export default function TransactionsScreen() {
           </Text>
           <Ionicons name="chevron-down" size={16} color="#666" />
         </TouchableOpacity>
-        {!!filterCategoryIds.length && (
-           <TouchableOpacity style={styles.clearFilter} onPress={() => setFilterCategoryIds([])}>
-             <Text style={styles.clearFilterText}>{t('transactions.filters.clear')}</Text>
-           </TouchableOpacity>
-        )}
       </View>
 
       {/* Active Filters Area */}
       {(filterType !== 'all' || filterCategoryIds.length > 0) && (
         <View style={styles.activeFiltersRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
-            <Text style={styles.activeFiltersLabel}>{t('transactions.filters.active')}:</Text>
             
             {filterType !== 'all' && (
               <TouchableOpacity style={styles.activeFilterChip} onPress={() => setFilterType('all')}>

@@ -6,7 +6,7 @@ const GEMINI_API_KEY = Constants.expoConfig?.extra?.GEMINI_API_KEY || process.en
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
 
 export interface FinancialInsight {
-  type: 'insight' | 'transaction' | 'goal' | 'bill' | 'error'
+  type: 'insight' | 'transaction' | 'goal' | 'bill' | 'batch' | 'error'
   content: string
   data?: any
 }
@@ -247,11 +247,17 @@ Capabilities:
 3. Create goals when requested.
 4. Create bills when requested.
 5. Provide financial insights and budgeting help.
+6. Handle multiple items/expenses in a single message (Batch mode).
 
 Output rules:
 - When the user asks to register/create anything, output ONLY a single valid JSON object. No explanations, no markdown, no extra text.
-- JSON shape: { "action": "create_transaction|create_bill|create_goal", "data": { ... } }
+- JSON shape for single item: { "action": "create_transaction|create_bill|create_goal", "data": { ... } }
+- JSON shape for multiple items: { "action": "create_batch", "data": [ { "type": "transaction", "data": { ... } }, { "type": "bill", "data": { ... } } ] }
 - Use ISO 8601 date strings. Use category names as strings. Avoid trailing commas and comments.
+- If the user provides a list of items (e.g., shopping list), try to group them into logical transactions or keep them separate if explicitly distinct.
+- If "milk 30$ and vegetables 10$", combine them into one "Food" transaction of 40$ with description "milk, vegetables".
+- ALWAYS group items of the same category into a single transaction with the sum of amounts and concatenated descriptions.
+- If "transport 10$ and chocolate 20$", create two transactions: one "Transportation", one "Food".
 - If the user is not asking to create anything, respond with clear helpful text.
 
 Examples:
@@ -261,6 +267,8 @@ Examples:
 {"action":"create_goal","data":{"title":"Emergency Fund","target_amount":1000,"goal_type":"savings","time_period":"monthly"}}
 - Bill:
 {"action":"create_bill","data":{"title":"Internet","amount":89.90,"due_date":"${new Date().toISOString().split('T')[0]}","frequency":"monthly","category":"Utilities"}}
+- Batch (Multiple Expenses):
+{"action":"create_batch","data":[{"type":"transaction","data":{"amount":10,"description":"Uber","type":"expense","category":"Transportation"}},{"type":"transaction","data":{"amount":20,"description":"Chocolate","type":"expense","category":"Food"}}]}
 
 Strictness:
 - If asked to register, limit output to the creation command JSON only.
@@ -278,6 +286,15 @@ Current date: ${new Date().toISOString().split('T')[0]}`
     try {
       const parsed = JSON.parse(cleaned)
       if (parsed && typeof parsed === 'object' && parsed.action && parsed.data) {
+        if (parsed.action === 'create_batch') {
+          return {
+            type: 'batch',
+            content: this.language === 'pt-BR' 
+              ? `Confirmação de Lote: Encontrei ${parsed.data.length} itens para registrar.` 
+              : `Batch Confirmation: I found ${parsed.data.length} items to register.`,
+            data: parsed.data
+          }
+        }
         if (parsed.action === 'create_transaction') {
           return {
             type: 'transaction',
@@ -338,14 +355,26 @@ Current date: ${new Date().toISOString().split('T')[0]}`
       transaction_date,
     })
     if (error) throw error
-    return { success: true }
+    // Fetch the inserted record to get ID
+    const { data: newTx } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', this.userId)
+      .eq('amount', amount)
+      .eq('description', description)
+      .eq('transaction_date', transaction_date)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+      
+    return { success: true, data: newTx }
   }
 
   async createGoal(goalData: any) {
     return await supabase.from('goals').insert({
       ...goalData,
       user_id: this.userId
-    })
+    }).select().single()
   }
 
   async createBill(billData: any) {
@@ -375,9 +404,9 @@ Current date: ${new Date().toISOString().split('T')[0]}`
       category_id,
       is_paid: false,
       paid_date: null,
-    })
+    }).select().single()
     if (error) throw error
-    return { success: true }
+    return { success: true, data: (await supabase.from('bills').select('id').eq('user_id', this.userId).eq('title', title).eq('amount', amount).order('created_at', { ascending: false }).limit(1).single()).data }
   }
 
   private async getRecentConversation(limit: number) {

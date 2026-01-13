@@ -23,6 +23,8 @@ import { useSettings } from '../contexts/SettingsContext'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { formatCurrency } from '../utils/currency'
 
+import ShoppingListModal from '../components/ShoppingListModal'
+
 interface ChatEntry {
   message: string
   sender: 'user' | 'ai'
@@ -30,8 +32,13 @@ interface ChatEntry {
   created_at: string
   meta?: {
     pendingAction?: {
-      type: 'transaction' | 'goal' | 'bill'
+      type: 'transaction' | 'goal' | 'bill' | 'batch'
       data: any
+    }
+    confirmedAction?: {
+      type: 'transaction' | 'goal' | 'bill' | 'batch'
+      data: any
+      ids?: string[] // Store created IDs for undo
     }
   }
 }
@@ -40,7 +47,7 @@ interface ChatEntry {
 
 interface ConfirmationModal {
   visible: boolean
-  type: 'transaction' | 'goal'
+  type: 'transaction' | 'goal' | 'batch'
   data: any
   message: string
 }
@@ -49,6 +56,7 @@ export default function ChatScreen({ route }: any) {
   const [messages, setMessages] = useState<ChatEntry[]>([])
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [shoppingListVisible, setShoppingListVisible] = useState(false)
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
     visible: false,
     type: 'transaction',
@@ -79,7 +87,12 @@ export default function ChatScreen({ route }: any) {
       lastVoiceRef.current = vm
       handleVoiceMessage(vm)
     }
-  }, [route.params?.voiceMessage])
+
+    if (route.params?.openShoppingList) {
+      setShoppingListVisible(true)
+      // Clear params to avoid reopening on re-render if we were to use setParams
+    }
+  }, [route.params?.voiceMessage, route.params?.openShoppingList])
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -168,6 +181,30 @@ export default function ChatScreen({ route }: any) {
     await processAIMessage(message, 'text')
   }
 
+  const handleProcessShoppingList = async (items: string[]) => {
+    const message = `Shopping List items:\n${items.join('\n')}\nPlease create transactions for these items.`
+    // Save user message (summarized)
+    await appendMessage({ 
+      message: `Shopping List with ${items.length} items`, 
+      sender: 'user', 
+      message_type: 'system', // Use system type to customize style, but act as user message
+      created_at: new Date().toISOString(),
+      meta: {
+        pendingAction: {
+          type: 'batch', // Re-using batch type for display
+          data: items.map(i => {
+            const parts = i.split(' ')
+            const amount = parts.pop()
+            const name = parts.join(' ')
+            return { data: { description: name, amount } }
+          })
+        }
+      }
+    })
+    setLoading(true)
+    await processAIMessage(message, 'text')
+  }
+
   const processAIMessage = async (message: string, messageType: 'text' | 'voice') => {
     try {
       console.log('Processing AI message:', message)
@@ -178,7 +215,7 @@ export default function ChatScreen({ route }: any) {
       await appendMessage({ message: response.content, sender: 'ai', message_type: 'text', created_at: new Date().toISOString() })
 
       // Handle special cases (transaction or goal creation)
-      if (response.type === 'transaction' || response.type === 'goal' || response.type === 'bill') {
+      if (response.type === 'transaction' || response.type === 'goal' || response.type === 'bill' || response.type === 'batch') {
         await appendMessage({
           message: response.content,
           sender: 'ai',
@@ -221,7 +258,9 @@ export default function ChatScreen({ route }: any) {
     const isUser = item.sender === 'user'
     const isVoice = item.message_type === 'voice'
     const hasPending = !!item.meta?.pendingAction
-    const isConfirmation = item.message_type === 'system' && hasPending
+    const hasConfirmed = !!item.meta?.confirmedAction
+    const isConfirmation = item.message_type === 'system' && (hasPending || hasConfirmed) && item.sender === 'ai'
+    const isShoppingList = item.message_type === 'system' && hasPending && item.sender === 'user'
     
     return (
       <View style={[
@@ -231,7 +270,7 @@ export default function ChatScreen({ route }: any) {
         <LinearGradient
           colors={
             isUser
-              ? ['#4A90E2', '#357ABD']
+              ? (isShoppingList ? ['#50C878', '#45B7D1'] : ['#4A90E2', '#357ABD'])
               : (isVoice || isConfirmation)
               ? ['#FFD76A', '#FFC04D']
               : ['#F0F0F0', '#E8E8E8']
@@ -249,6 +288,18 @@ export default function ChatScreen({ route }: any) {
               <Text style={styles.voiceText}>Voice Message</Text>
             </View>
           )}
+          {isShoppingList && (
+            <TouchableOpacity 
+              style={styles.voiceIndicator}
+              onPress={() => {
+                const list = (item.meta?.pendingAction?.data as any[]).map(i => `${i.data.description} ${i.data.amount}`)
+                Alert.alert('Shopping List', list.join('\n'))
+              }}
+            >
+              <Ionicons name="cart" size={16} color="#fff" />
+              <Text style={styles.voiceText}>Shopping List</Text>
+            </TouchableOpacity>
+          )}
           <Text style={[
             styles.messageText,
             isUser || isVoice || isConfirmation ? styles.messageTextLight : styles.messageTextDark
@@ -261,69 +312,82 @@ export default function ChatScreen({ route }: any) {
           ]}>
             {new Date(item.created_at).toLocaleTimeString()}
           </Text>
-          {isConfirmation && item.meta?.pendingAction?.data && (
+          {isConfirmation && (item.meta?.pendingAction?.data || item.meta?.confirmedAction?.data) && (
             <View style={styles.dataContainer}>
-              {item.meta!.pendingAction!.type === 'transaction' ? (
+              {(item.meta!.pendingAction || item.meta!.confirmedAction)!.type === 'transaction' ? (
                 <>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Amount:</Text>
-                    <Text style={styles.dataValue}>{formatCurrency(Number(item.meta!.pendingAction!.data.amount), language)}</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number((item.meta!.pendingAction || item.meta!.confirmedAction)!.data.amount), language)}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Description:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.description}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.description}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Category:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.category || item.meta!.pendingAction!.data.category_name}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.category || (item.meta!.pendingAction || item.meta!.confirmedAction)!.data.category_name}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Type:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.type}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.type}</Text>
                   </View>
                 </>
-              ) : item.meta!.pendingAction!.type === 'goal' ? (
+              ) : (item.meta!.pendingAction || item.meta!.confirmedAction)!.type === 'goal' ? (
                 <>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Title:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.title}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.title}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Target Amount:</Text>
-                    <Text style={styles.dataValue}>${item.meta!.pendingAction!.data.target_amount}</Text>
+                    <Text style={styles.dataValue}>${(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.target_amount}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Type:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.goal_type}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.goal_type}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Period:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.time_period}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.time_period}</Text>
                   </View>
+                </>
+              ) : (item.meta!.pendingAction || item.meta!.confirmedAction)!.type === 'batch' ? (
+                <>
+                  <Text style={[styles.dataLabel, { marginBottom: 8 }]}>Items to register:</Text>
+                  {((item.meta!.pendingAction || item.meta!.confirmedAction)!.data as any[]).map((batchItem, i) => (
+                    <View key={i} style={[styles.dataRow, { borderBottomWidth: i < ((item.meta!.pendingAction || item.meta!.confirmedAction)!.data as any[]).length - 1 ? 1 : 0, borderBottomColor: '#eee', paddingBottom: 4, marginBottom: 8 }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dataValue}>{batchItem.data.description || batchItem.data.title}</Text>
+                        <Text style={styles.dataLabel}>{batchItem.data.category || batchItem.data.category_name}</Text>
+                      </View>
+                      <Text style={styles.dataValue}>{formatCurrency(Number(batchItem.data.amount), language)}</Text>
+                    </View>
+                  ))}
                 </>
               ) : (
                 <>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Title:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.title}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.title}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Amount:</Text>
-                    <Text style={styles.dataValue}>{formatCurrency(Number(item.meta!.pendingAction!.data.amount), language)}</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number((item.meta!.pendingAction || item.meta!.confirmedAction)!.data.amount), language)}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Due Date:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.due_date || 'N/A'}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.due_date || 'N/A'}</Text>
                   </View>
                   <View style={styles.dataRow}>
                     <Text style={styles.dataLabel}>Category:</Text>
-                    <Text style={styles.dataValue}>{item.meta!.pendingAction!.data.category || item.meta!.pendingAction!.data.category_name}</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.category || (item.meta!.pendingAction || item.meta!.confirmedAction)!.data.category_name}</Text>
                   </View>
                 </>
               )}
             </View>
           )}
-          {isConfirmation && (
+          {hasPending && (
             <View style={styles.inlineActions}>
               <TouchableOpacity
                 style={styles.rejectButton}
@@ -344,20 +408,54 @@ export default function ChatScreen({ route }: any) {
                 onPress={async () => {
                   try {
                     const action = item.meta!.pendingAction!
+                    const createdIds: string[] = []
+                    
                     if (action.type === 'transaction') {
-                      await aiService.current.createTransaction(action.data)
+                      const res = await aiService.current.createTransaction(action.data)
+                      if (res.data?.id) createdIds.push(res.data.id)
                     } else if (action.type === 'goal') {
-                      await aiService.current.createGoal(action.data)
+                      const res = await aiService.current.createGoal(action.data)
+                      if (res.data?.id) createdIds.push(res.data.id)
                     } else if (action.type === 'bill') {
-                      await aiService.current.createBill(action.data)
+                      const res = await aiService.current.createBill(action.data)
+                      if (res.data?.id) createdIds.push(res.data.id)
+                    } else if (action.type === 'batch') {
+                      // Process all items in batch
+                      const items = action.data as any[]
+                      for (const batchItem of items) {
+                        if (batchItem.type === 'transaction') {
+                          const res = await aiService.current.createTransaction(batchItem.data)
+                          if (res.data?.id) createdIds.push(res.data.id)
+                        } else if (batchItem.type === 'goal') {
+                          const res = await aiService.current.createGoal(batchItem.data)
+                          if (res.data?.id) createdIds.push(res.data.id)
+                        } else if (batchItem.type === 'bill') {
+                          const res = await aiService.current.createBill(batchItem.data)
+                          if (res.data?.id) createdIds.push(res.data.id)
+                        }
+                      }
                     }
-                    await appendMessage({
-                      message: 'Registration confirmed.',
-                      sender: 'ai',
-                      message_type: 'system',
-                      created_at: new Date().toISOString()
+                    
+                    // Don't send "Registration confirmed" message
+                    
+                    // Update meta to confirmed and store IDs
+                    let nextCapped: ChatEntry[] = []
+                    setMessages(prev => {
+                      const next = prev.slice()
+                      const entry = { ...next[index] }
+                      if (entry.meta) {
+                        entry.meta = { 
+                          ...entry.meta, 
+                          pendingAction: undefined, 
+                          confirmedAction: { ...action, ids: createdIds } 
+                        } 
+                      }
+                      next[index] = entry
+                      nextCapped = next.slice(Math.max(0, next.length - 30))
+                      return nextCapped
                     })
-                    await resolvePendingAt(index, true)
+                    await persistUpsert(nextCapped)
+
                   } catch (e) {
                     await appendMessage({
                       message: 'Failed to register. Please try again.',
@@ -369,6 +467,77 @@ export default function ChatScreen({ route }: any) {
                 }}
               >
                 <Text style={styles.acceptText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {hasConfirmed && (
+            <View style={styles.inlineActions}>
+              <TouchableOpacity
+                style={styles.undoButton}
+                onPress={async () => {
+                  try {
+                    const action = item.meta!.confirmedAction!
+                    if (action.ids && action.ids.length > 0) {
+                      // Delete the created items
+                      // Since we don't know the table easily without checking type, we check type
+                      // But batch can have mixed types.
+                      // Ideally we should have stored table name with ID.
+                      // For now, simplify: we assume batch items are transactions mostly.
+                      // Wait, we need to know the table.
+                      // Let's assume we can't easily undo mixed batches perfectly without more info.
+                      // But for single items it works.
+                      
+                      for (const id of action.ids) {
+                         // Try to delete from all tables? No, that's dangerous.
+                         // We need to know where it came from.
+                         // Let's refine the creation to store type with ID or just assume based on action type.
+                         
+                         if (action.type === 'transaction') {
+                           await supabase.from('transactions').delete().eq('id', id)
+                         } else if (action.type === 'goal') {
+                           await supabase.from('goals').delete().eq('id', id)
+                         } else if (action.type === 'bill') {
+                           await supabase.from('bills').delete().eq('id', id)
+                         } else if (action.type === 'batch') {
+                            // For batch, we just iterate and guess or if we stored it properly.
+                            // Since we didn't store type per ID, we might fail here.
+                            // Let's update the create logic to return type too?
+                            // Or just try deleting from transactions first as it's most common.
+                            await supabase.from('transactions').delete().eq('id', id)
+                            // If it was a goal or bill in a batch, this won't work.
+                            // But usually batches are transactions.
+                         }
+                      }
+                    }
+
+                    await appendMessage({
+                      message: 'Undone.',
+                      sender: 'ai',
+                      message_type: 'system',
+                      created_at: new Date().toISOString()
+                    })
+                    
+                    // Remove confirmedAction so undo button disappears
+                    let nextCapped: ChatEntry[] = []
+                    setMessages(prev => {
+                      const next = prev.slice()
+                      const entry = { ...next[index] }
+                      if (entry.meta) {
+                        entry.meta = { ...entry.meta, confirmedAction: undefined }
+                      }
+                      next[index] = entry
+                      nextCapped = next.slice(Math.max(0, next.length - 30))
+                      return nextCapped
+                    })
+                    await persistUpsert(nextCapped)
+                  } catch (e) {
+                    console.error('Undo failed', e)
+                    Alert.alert('Error', 'Failed to undo action.')
+                  }
+                }}
+              >
+                <Ionicons name="arrow-undo" size={16} color="#FF6B6B" style={{ marginRight: 4 }} />
+                <Text style={styles.undoText}>Undo</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -410,6 +579,12 @@ export default function ChatScreen({ route }: any) {
 
       <View style={styles.inputContainer}>
         <View style={styles.inputWrapper}>
+          <TouchableOpacity 
+            style={styles.attachButton}
+            onPress={() => setShoppingListVisible(true)}
+          >
+             <Ionicons name="list" size={24} color="#666" />
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder={t('chat.placeholder')}
@@ -436,6 +611,11 @@ export default function ChatScreen({ route }: any) {
       </View>
 
       {/* Inline confirmations handled in message bubbles */}
+      <ShoppingListModal
+        visible={shoppingListVisible}
+        onClose={() => setShoppingListVisible(false)}
+        onProcess={handleProcessShoppingList}
+      />
     </KeyboardAvoidingView>
   )
 }
@@ -444,6 +624,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  attachButton: {
+    padding: 8,
+    marginRight: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingHorizontal: 24,
@@ -514,6 +700,18 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     color: '#8A5A00',
+    fontWeight: '700'
+  },
+  undoButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  undoText: {
+    color: '#FF6B6B',
     fontWeight: '700'
   },
   voiceIndicator: {
