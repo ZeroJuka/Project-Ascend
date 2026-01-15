@@ -387,7 +387,7 @@ export default function ChatScreen({ route }: any) {
               )}
             </View>
           )}
-          {hasPending && (
+          {hasPending && !isShoppingList && (
             <View style={styles.inlineActions}>
               <TouchableOpacity
                 style={styles.rejectButton}
