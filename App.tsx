@@ -9,6 +9,7 @@ import BottomTabNavigator from './src/navigation/BottomTabNavigator'
 import AuthScreen from './src/screens/AuthScreen'
 import ChatScreen from './src/screens/ChatScreen'
 import UserScreen from './src/screens/UserScreen'
+import SafesScreen from './src/screens/SafesScreen'
 import { setupNotifications } from './src/services/Notifications'
 
 import { LogBox } from 'react-native'
@@ -42,6 +43,7 @@ function AppNavigator() {
             <Stack.Screen name="Main" component={BottomTabNavigator} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="User" component={UserScreen} />
+            <Stack.Screen name="Safes" component={SafesScreen} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthScreen} />

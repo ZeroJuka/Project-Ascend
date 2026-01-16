@@ -21,6 +21,7 @@ const en: Dict = {
   'home.action.add_transaction': 'Add Transaction',
   'home.action.shopping_list': 'Shopping List',
   'home.action.view_goals': 'View Goals',
+  'home.action.safes': 'My Safes',
   'home.action.analytics': 'Analytics',
 
   'chat.title': 'ASCEND AI Assistant',
@@ -172,6 +173,7 @@ const pt: Dict = {
   'home.action.add_transaction': 'Adicionar Transação',
   'home.action.shopping_list': 'Lista de Compras',
   'home.action.view_goals': 'Ver Metas',
+  'home.action.safes': 'Meus Cofres',
   'home.action.analytics': 'Análises',
 
   'chat.title': 'Assistente IA ASCEND',

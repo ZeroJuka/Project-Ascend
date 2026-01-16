@@ -6,7 +6,7 @@ const GEMINI_API_KEY = Constants.expoConfig?.extra?.GEMINI_API_KEY || process.en
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
 
 export interface FinancialInsight {
-  type: 'insight' | 'transaction' | 'goal' | 'bill' | 'batch' | 'error'
+  type: 'insight' | 'transaction' | 'goal' | 'bill' | 'batch' | 'safe_creation' | 'safe_deposit' | 'error'
   content: string
   data?: any
 }
@@ -204,23 +204,30 @@ export class GeminiAIService {
   }
 
   private async getUserFinancialData() {
+    // Use Promise.allSettled for safes to handle missing table gracefully
     const [
-      { data: transactions },
-      { data: categories },
-      { data: goals },
-      { data: bills }
-    ] = await Promise.all([
+      transactionsResult,
+      categoriesResult,
+      goalsResult,
+      billsResult,
+      safesResult
+    ] = await Promise.allSettled([
       supabase.from('transactions').select('*').eq('user_id', this.userId),
       supabase.from('categories').select('*'),
       supabase.from('goals').select('*').eq('user_id', this.userId),
-      supabase.from('bills').select('*').eq('user_id', this.userId)
+      supabase.from('bills').select('*').eq('user_id', this.userId),
+      supabase.from('safes').select('*').eq('user_id', this.userId)
     ])
 
+    const getValue = (result: PromiseSettledResult<any>) => 
+      result.status === 'fulfilled' && result.value.data ? result.value.data : []
+
     return {
-      transactions: transactions || [],
-      categories: categories || [],
-      goals: goals || [],
-      bills: bills || []
+      transactions: getValue(transactionsResult),
+      categories: getValue(categoriesResult),
+      goals: getValue(goalsResult),
+      bills: getValue(billsResult),
+      safes: getValue(safesResult)
     }
   }
 
@@ -237,6 +244,7 @@ User's Financial Data:
 - Categories Available: ${financialData.categories.map((c: any) => c.name).join(', ')}
 - Active Goals: ${financialData.goals.length}
 - Upcoming Bills: ${financialData.bills.filter((b: any) => !b.is_paid).length}
+- Active Safes: ${financialData.safes.map((s: any) => `${s.name} ($${s.current_amount})`).join(', ')}
 
 Conversation History (recent messages):
 ${historyText}
@@ -246,23 +254,30 @@ Capabilities:
 2. Create transactions when requested.
 3. Create goals when requested.
 4. Create bills when requested.
-5. Provide financial insights and budgeting help.
-6. Handle multiple items/expenses in a single message (Batch mode).
+5. Create Safes (cofres) when requested.
+6. Store money in Safes (transfer to safe).
+7. Provide financial insights and budgeting help.
+8. Handle multiple items/expenses in a single message (Batch mode).
 
 Output rules:
 - When the user asks to register/create anything, output ONLY a single valid JSON object. No explanations, no markdown, no extra text.
-- JSON shape for single item: { "action": "create_transaction|create_bill|create_goal", "data": { ... } }
-- JSON shape for multiple items: { "action": "create_batch", "data": [ { "type": "transaction", "data": { ... } }, { "type": "bill", "data": { ... } } ] }
+- JSON shape for single item: { "action": "create_transaction|create_bill|create_goal|create_safe|safe_deposit", "data": { ... } }
+- JSON shape for multiple items: { "action": "create_batch", "data": [ ... ] }
 - Use ISO 8601 date strings. Use category names as strings. Avoid trailing commas and comments.
-- If the user provides a list of items (e.g., shopping list), try to group them into logical transactions or keep them separate if explicitly distinct.
 - If "milk 30$ and vegetables 10$", combine them into one "Food" transaction of 40$ with description "milk, vegetables".
 - ALWAYS group items of the same category into a single transaction with the sum of amounts and concatenated descriptions.
 - If "transport 10$ and chocolate 20$", create two transactions: one "Transportation", one "Food".
+- If user asks to "Create a safe for House", use action "create_safe". Data: { name: "House", target_amount: number (optional) }.
+- If user asks to "Put 50 in House Safe", use action "safe_deposit". Data: { safe_name: "House", amount: 50, description: "Deposit to House Safe" }.
 - If the user is not asking to create anything, respond with clear helpful text.
 
 Examples:
 - Transaction:
 {"action":"create_transaction","data":{"amount":49.99,"description":"Groceries","type":"expense","category":"Food","transaction_date":"${new Date().toISOString().split('T')[0]}"}}
+- Safe Creation:
+{"action":"create_safe","data":{"name":"Emergency Fund","target_amount":1000}}
+- Safe Deposit:
+{"action":"safe_deposit","data":{"safe_name":"Emergency Fund","amount":50,"description":"Monthly saving"}}
 - Goal:
 {"action":"create_goal","data":{"title":"Emergency Fund","target_amount":1000,"goal_type":"savings","time_period":"monthly"}}
 - Bill:
@@ -313,6 +328,20 @@ Current date: ${new Date().toISOString().split('T')[0]}`
           return {
             type: 'bill',
             content: this.language === 'pt-BR' ? 'Confirmação de Registro: Revise os detalhes da conta.' : 'Registration Confirmation: Please review the bill details.',
+            data: parsed.data
+          }
+        }
+        if (parsed.action === 'create_safe') {
+          return {
+            type: 'safe_creation',
+            content: this.language === 'pt-BR' ? 'Confirmação de Criação: Revise os detalhes do cofre.' : 'Creation Confirmation: Please review safe details.',
+            data: parsed.data
+          }
+        }
+        if (parsed.action === 'safe_deposit') {
+          return {
+            type: 'safe_deposit',
+            content: this.language === 'pt-BR' ? 'Confirmação de Depósito: Revise a transferência para o cofre.' : 'Deposit Confirmation: Please review the safe deposit.',
             data: parsed.data
           }
         }
@@ -407,6 +436,97 @@ Current date: ${new Date().toISOString().split('T')[0]}`
     }).select().single()
     if (error) throw error
     return { success: true, data: (await supabase.from('bills').select('id').eq('user_id', this.userId).eq('title', title).eq('amount', amount).order('created_at', { ascending: false }).limit(1).single()).data }
+  }
+
+  async createSafe(safeData: any) {
+    return await supabase.from('safes').insert({
+      ...safeData,
+      current_amount: 0,
+      user_id: this.userId,
+      icon: 'lock-closed',
+      color: '#4A90E2'
+    }).select().single()
+  }
+
+  async addToSafe(depositData: any) {
+    // 1. Find safe
+    const { data: safe } = await supabase
+      .from('safes')
+      .select('id, current_amount')
+      .eq('user_id', this.userId)
+      .eq('name', depositData.safe_name)
+      .single()
+
+    if (!safe) throw new Error(`Safe '${depositData.safe_name}' not found`)
+
+    const amount = Number(depositData.amount)
+
+    // 2. Find or create "Safes" category
+    let category_id: string | null = null
+    const { data: existingCat } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('name', 'Safes')
+      .eq('user_id', this.userId)
+      .single()
+
+    if (existingCat) {
+      category_id = existingCat.id
+    } else {
+      // Try to find default
+      const { data: defaultCat } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('name', 'Safes')
+        .eq('is_default', true)
+        .maybeSingle()
+      
+      if (defaultCat) {
+        category_id = defaultCat.id
+      } else {
+        // Create it
+        const { data: newCat } = await supabase
+          .from('categories')
+          .insert({
+            user_id: this.userId,
+            name: 'Safes',
+            color: '#F39C12',
+            icon: 'lock-closed',
+            is_default: false
+          })
+          .select('id')
+          .single()
+        if (newCat) category_id = newCat.id
+      }
+    }
+
+    // 3. Create Expense Transaction
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: this.userId,
+        amount: amount,
+        description: depositData.description || `Deposit to ${depositData.safe_name}`,
+        type: 'expense',
+        category_id: category_id,
+        transaction_date: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (txError) throw txError
+
+    // 4. Update Safe Balance
+    const { data: updatedSafe, error: safeError } = await supabase
+      .from('safes')
+      .update({ current_amount: safe.current_amount + amount })
+      .eq('id', safe.id)
+      .select()
+      .single()
+
+    if (safeError) throw safeError
+
+    return { success: true, data: { transaction, safe: updatedSafe } }
   }
 
   private async getRecentConversation(limit: number) {

@@ -17,6 +17,8 @@ export default function HomeScreen() {
     totalExpenses: 0,
     monthlyIncome: 0,
     monthlyExpenses: 0,
+    totalSafes: 0,
+    monthlySaved: 0,
   })
   const [insights, setInsights] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,11 +48,14 @@ export default function HomeScreen() {
       const currentMonth = currentDate.getMonth() + 1
       const currentYear = currentDate.getFullYear()
 
-      // Fetch all transactions for the user
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('*, category:categories(*)')
-        .eq('user_id', user?.id)
+      // Fetch all transactions and safes for the user
+      const [
+        { data: transactions },
+        { data: safes }
+      ] = await Promise.all([
+        supabase.from('transactions').select('*, category:categories(*)').eq('user_id', user?.id),
+        supabase.from('safes').select('*').eq('user_id', user?.id)
+      ])
 
       // Calculate totals
       const totalIncome = transactions
@@ -78,8 +83,18 @@ export default function HomeScreen() {
         ?.filter(t => t.type === 'expense')
         .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
 
+      // Calculate Safes data
+      const totalSafes = safes?.reduce((sum, s) => sum + (s.current_amount || 0), 0) || 0
+      
+      // Calculate monthly saved (Deposits to safes this month)
+      // Heuristic: Transactions this month with description containing safe names or category "Safes"
+      // Better: check if category is "Safes"
+      const monthlySaved = monthlyTransactions
+        ?.filter(t => t.type === 'expense' && (t.category?.name === 'Safes' || t.description.toLowerCase().includes('deposit to')))
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0
+
       // Generate insights
-      const insights = generateInsights(transactions || [], monthlyIncome, monthlyExpenses)
+      const insights = generateInsights(transactions || [], monthlyIncome, monthlyExpenses, safes || [])
 
       setFinancialData({
         totalBalance: totalIncome - totalExpenses,
@@ -87,6 +102,8 @@ export default function HomeScreen() {
         totalExpenses,
         monthlyIncome,
         monthlyExpenses,
+        totalSafes,
+        monthlySaved,
       })
       setInsights(insights)
     } catch (error) {
@@ -97,9 +114,35 @@ export default function HomeScreen() {
     }
   }
 
-  const generateInsights = (transactions: any[], monthlyIncome: number, monthlyExpenses: number) => {
+  const generateInsights = (transactions: any[], monthlyIncome: number, monthlyExpenses: number, safes: any[]) => {
     const insights = []
     
+    // Safes Insight
+    if (safes.length > 0) {
+      const totalSaved = safes.reduce((acc, s) => acc + (s.current_amount || 0), 0)
+      const nearGoal = safes.find(s => s.target_amount && s.current_amount >= s.target_amount * 0.9 && s.current_amount < s.target_amount)
+      
+      if (nearGoal) {
+        insights.push({
+          id: 'safe-goal-near',
+          title: 'Goal Almost Reached!',
+          description: `You are close to your goal for ${nearGoal.name}`,
+          icon: 'trophy',
+          color: '#F39C12',
+          action: 'View safes'
+        })
+      } else {
+        insights.push({
+          id: 'safes-total',
+          title: 'Total Saved',
+          description: `You have ${formatCurrency(totalSaved, 'en')} securely stored in safes`,
+          icon: 'lock-closed',
+          color: '#F39C12',
+          action: 'View safes'
+        })
+      }
+    }
+
     // Spending vs Income insight
     if (monthlyExpenses > monthlyIncome * 0.8) {
       insights.push({
@@ -171,6 +214,12 @@ export default function HomeScreen() {
       onPress: () => navigation.navigate('Goals' as never),
     },
     {
+      title: t('home.action.safes'),
+      icon: 'lock-closed',
+      color: '#F39C12',
+      onPress: () => navigation.navigate('Safes' as never),
+    },
+    {
       title: t('home.action.analytics'),
       icon: 'stats-chart',
       color: '#FF6B6B',
@@ -218,28 +267,57 @@ export default function HomeScreen() {
           {formatCurrency(financialData.totalBalance, language)}
         </Text>
         <View style={styles.balanceRow}>
-          <View style={styles.balanceItem}>
-            <Ionicons name="trending-up" size={16} color="#50C878" />
-            <Text style={styles.balanceItemText}>
-              {formatCurrency(financialData.monthlyIncome, language)}
-            </Text>
+            <View style={styles.balanceItem}>
+              <Ionicons name="trending-up" size={16} color="#50C878" />
+              <Text style={styles.balanceItemText}>
+                {formatCurrency(financialData.monthlyIncome, language)}
+              </Text>
+            </View>
+            <View style={styles.balanceItem}>
+              <Ionicons name="trending-down" size={16} color="#FF6B6B" />
+              <Text style={styles.balanceItemText}>
+                {formatCurrency(financialData.monthlyExpenses, language)}
+              </Text>
+            </View>
           </View>
-          <View style={styles.balanceItem}>
-            <Ionicons name="trending-down" size={16} color="#FF6B6B" />
-            <Text style={styles.balanceItemText}>
-              {formatCurrency(financialData.monthlyExpenses, language)}
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
+
+        {/* Safes Summary Card */}
+      {financialData.totalSafes > 0 && (
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('Safes' as never)}
+        >
+          <LinearGradient
+            colors={['#F39C12', '#E67E22']}
+            style={styles.safesCard}
+          >
+            <View style={styles.safesRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={styles.safesIconContainer}>
+                  <Ionicons name="lock-closed" size={16} color="#F39C12" />
+                </View>
+                <View>
+                  <Text style={styles.safesLabel}>Total Saved</Text>
+                  <Text style={styles.safesAmount}>{formatCurrency(financialData.totalSafes, language)}</Text>
+                </View>
+              </View>
+              
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.safesLabel}>This Month</Text>
+                <Text style={[styles.safesAmount, { fontSize: 16 }]}>+{formatCurrency(financialData.monthlySaved, language)}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('home.quick_actions')}</Text>
         <View style={styles.actionsGrid}>
-          {quickActions.map((action, index) => (
+          {quickActions.map((action) => (
             <TouchableOpacity
-              key={index}
+              key={action.title}
               style={styles.actionButton}
               onPress={action.onPress}
             >
@@ -415,15 +493,15 @@ const styles = StyleSheet.create({
   },
   actionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   actionButton: {
-    flex: 1,
+    width: '30%',
     alignItems: 'center',
     paddingVertical: 16,
-    marginHorizontal: 4,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -513,5 +591,40 @@ const styles = StyleSheet.create({
   insightAction: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  safesCard: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  safesIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  safesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  safesLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 2,
+  },
+  safesAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
   },
 })

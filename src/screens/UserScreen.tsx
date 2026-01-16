@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert } fro
 import { useSettings } from '../contexts/SettingsContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useAuth } from '../contexts/AuthContext'
-import { seedDummyTransactions } from '../services/SeedService'
 
 export default function UserScreen() {
   const { theme, language, displayName, avatarUri, setTheme, setLanguage, setDisplayName, setAvatarUri } = useSettings()
@@ -91,31 +90,6 @@ export default function UserScreen() {
             <Text style={[styles.optionText, language === 'pt-BR' && styles.optionTextActive]}>{t('user.language.pt')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>{t('user.demo.title')}</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={async () => {
-            try {
-              const targetId = 'be0f796f-750f-48d9-a168-59cb48c44b8a'
-              const uid = user?.id || ''
-              if (uid !== targetId) {
-                // Still allow seeding for the logged-in user to validate UI
-                const { count } = await seedDummyTransactions(uid)
-                Alert.alert('OK', t('user.demo.success'))
-              } else {
-                const { count } = await seedDummyTransactions(targetId)
-                Alert.alert('OK', t('user.demo.success'))
-              }
-            } catch (e) {
-              Alert.alert('Error', t('user.demo.error'))
-            }
-          }}
-        >
-          <Text style={styles.buttonText}>{t('user.demo.button')}</Text>
-        </TouchableOpacity>
       </View>
     </View>
   )

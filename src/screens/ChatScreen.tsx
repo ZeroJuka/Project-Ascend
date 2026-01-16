@@ -32,11 +32,11 @@ interface ChatEntry {
   created_at: string
   meta?: {
     pendingAction?: {
-      type: 'transaction' | 'goal' | 'bill' | 'batch'
+      type: 'transaction' | 'goal' | 'bill' | 'batch' | 'safe_creation' | 'safe_deposit'
       data: any
     }
     confirmedAction?: {
-      type: 'transaction' | 'goal' | 'bill' | 'batch'
+      type: 'transaction' | 'goal' | 'bill' | 'batch' | 'safe_creation' | 'safe_deposit'
       data: any
       ids?: string[] // Store created IDs for undo
     }
@@ -215,7 +215,7 @@ export default function ChatScreen({ route }: any) {
       await appendMessage({ message: response.content, sender: 'ai', message_type: 'text', created_at: new Date().toISOString() })
 
       // Handle special cases (transaction or goal creation)
-      if (response.type === 'transaction' || response.type === 'goal' || response.type === 'bill' || response.type === 'batch') {
+      if (response.type === 'transaction' || response.type === 'goal' || response.type === 'bill' || response.type === 'batch' || response.type === 'safe_creation' || response.type === 'safe_deposit') {
         await appendMessage({
           message: response.content,
           sender: 'ai',
@@ -365,6 +365,28 @@ export default function ChatScreen({ route }: any) {
                     </View>
                   ))}
                 </>
+              ) : (item.meta!.pendingAction || item.meta!.confirmedAction)!.type === 'safe_creation' ? (
+                <>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Safe Name:</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.name}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Target:</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number((item.meta!.pendingAction || item.meta!.confirmedAction)!.data.target_amount || 0), language)}</Text>
+                  </View>
+                </>
+              ) : (item.meta!.pendingAction || item.meta!.confirmedAction)!.type === 'safe_deposit' ? (
+                <>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>To Safe:</Text>
+                    <Text style={styles.dataValue}>{(item.meta!.pendingAction || item.meta!.confirmedAction)!.data.safe_name}</Text>
+                  </View>
+                  <View style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>Amount:</Text>
+                    <Text style={styles.dataValue}>{formatCurrency(Number((item.meta!.pendingAction || item.meta!.confirmedAction)!.data.amount), language)}</Text>
+                  </View>
+                </>
               ) : (
                 <>
                   <View style={styles.dataRow}>
@@ -419,6 +441,24 @@ export default function ChatScreen({ route }: any) {
                     } else if (action.type === 'bill') {
                       const res = await aiService.current.createBill(action.data)
                       if (res.data?.id) createdIds.push(res.data.id)
+                    } else if (action.type === 'safe_creation') {
+                      const res = await aiService.current.createSafe(action.data)
+                      if (res.data?.id) createdIds.push(res.data.id)
+                    } else if (action.type === 'safe_deposit') {
+                      const res = await aiService.current.addToSafe(action.data)
+                      // res.data is { transaction, safe }
+                      if (res.data?.transaction?.id) createdIds.push(res.data.transaction.id)
+                      // We also might want to track the safe ID for undo (reverting balance)
+                      // But our undo logic currently just deletes by ID.
+                      // For safe deposit, we need to revert the balance.
+                      // Let's store safe_id in the action data for reference during undo?
+                      // We can mutate action.data here? No, confirmedAction takes a copy.
+                      // We can push a special ID format? or just handle it in undo.
+                      // Let's just store the transaction ID for now, and in undo we fetch the transaction to see if it was a safe deposit?
+                      // Or better: store a compound ID "safe_deposit:<safe_id>:<amount>" in ids?
+                      // No, `ids` is string[].
+                      // Let's rely on the action type in confirmedAction.
+                      // createdIds will hold the transaction ID.
                     } else if (action.type === 'batch') {
                       // Process all items in batch
                       const items = action.data as any[]
@@ -498,6 +538,27 @@ export default function ChatScreen({ route }: any) {
                            await supabase.from('goals').delete().eq('id', id)
                          } else if (action.type === 'bill') {
                            await supabase.from('bills').delete().eq('id', id)
+                         } else if (action.type === 'safe_creation') {
+                           await supabase.from('safes').delete().eq('id', id)
+                         } else if (action.type === 'safe_deposit') {
+                           // 1. Delete the transaction
+                           await supabase.from('transactions').delete().eq('id', id)
+                           
+                           // 2. Revert safe balance
+                           // We need to find the safe first.
+                           const { data: safe } = await supabase
+                             .from('safes')
+                             .select('id, current_amount')
+                             .eq('user_id', user?.id)
+                             .eq('name', action.data.safe_name)
+                             .single()
+                             
+                           if (safe) {
+                             await supabase
+                               .from('safes')
+                               .update({ current_amount: safe.current_amount - Number(action.data.amount) })
+                               .eq('id', safe.id)
+                           }
                          } else if (action.type === 'batch') {
                             // For batch, we just iterate and guess or if we stored it properly.
                             // Since we didn't store type per ID, we might fail here.

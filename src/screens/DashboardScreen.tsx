@@ -32,6 +32,15 @@ interface FinancialStats {
   weeklyNet: number
 }
 
+interface SafeStats {
+  totalSaved: number
+  totalTarget: number
+  progress: number
+  topSafeName: string
+  topSafeAmount: number
+  safesCount: number
+}
+
 interface CategorySpending {
   category: string
   amount: number
@@ -66,6 +75,14 @@ export default function DashboardScreen() {
     weeklyIncome: 0,
     weeklyExpenses: 0,
     weeklyNet: 0,
+  })
+  const [safeStats, setSafeStats] = useState<SafeStats>({
+    totalSaved: 0,
+    totalTarget: 0,
+    progress: 0,
+    topSafeName: '',
+    topSafeAmount: 0,
+    safesCount: 0
   })
   const [categorySpending, setCategorySpending] = useState<CategorySpending[]>([])
   const [trends, setTrends] = useState<TransactionTrend[]>([])
@@ -154,13 +171,13 @@ export default function DashboardScreen() {
       setLoading(true)
       
       // Fetch all transactions for the user
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select(`
-          *,
-          category:categories(*)
-        `)
-        .eq('user_id', user?.id)
+      const [
+        { data: transactions },
+        { data: safes }
+      ] = await Promise.all([
+        supabase.from('transactions').select('*, category:categories(*)').eq('user_id', user?.id),
+        supabase.from('safes').select('*').eq('user_id', user?.id)
+      ])
 
       if (!transactions) return
 
@@ -232,6 +249,32 @@ export default function DashboardScreen() {
         weeklyExpenses,
         weeklyNet: weeklyIncome - weeklyExpenses,
       })
+
+      // Calculate Safe Stats
+      if (safes && safes.length > 0) {
+        const totalSaved = safes.reduce((sum, s) => sum + (s.current_amount || 0), 0)
+        const totalTarget = safes.reduce((sum, s) => sum + (s.target_amount || 0), 0)
+        const progress = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : 0
+        const topSafe = safes.sort((a, b) => (b.current_amount || 0) - (a.current_amount || 0))[0]
+        
+        setSafeStats({
+          totalSaved,
+          totalTarget,
+          progress,
+          topSafeName: topSafe?.name || '',
+          topSafeAmount: topSafe?.current_amount || 0,
+          safesCount: safes.length
+        })
+      } else {
+        setSafeStats({
+          totalSaved: 0,
+          totalTarget: 0,
+          progress: 0,
+          topSafeName: '',
+          topSafeAmount: 0,
+          safesCount: 0
+        })
+      }
 
       // Calculate category spending
       const categoryMap = new Map<string, number>()
@@ -626,6 +669,51 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {/* Safes Overview */}
+      {safeStats.safesCount > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Visão Geral dos Cofres' : 'Safes Overview'}</Text>
+          <View style={styles.safesOverviewCard}>
+            <View style={styles.safesHeader}>
+              <View style={styles.safesIconContainer}>
+                <Ionicons name="lock-closed" size={20} color="#F39C12" />
+              </View>
+              <View>
+                <Text style={styles.safesTotalLabel}>{language === 'pt-BR' ? 'Total Guardado' : 'Total Saved'}</Text>
+                <Text style={styles.safesTotalAmount}>{safeFormatCurrency(safeStats.totalSaved)}</Text>
+              </View>
+            </View>
+            
+            {safeStats.totalTarget > 0 && (
+              <View style={styles.progressSection}>
+                <View style={styles.progressLabels}>
+                  <Text style={styles.progressLabel}>{language === 'pt-BR' ? 'Progresso da Meta Total' : 'Total Goal Progress'}</Text>
+                  <Text style={styles.progressPercent}>{Math.round(safeStats.progress)}%</Text>
+                </View>
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: `${Math.min(100, safeStats.progress)}%` }]} />
+                </View>
+                <Text style={styles.targetLabel}>
+                  {language === 'pt-BR' 
+                    ? `Meta Total: ${safeFormatCurrency(safeStats.totalTarget)}`
+                    : `Total Target: ${safeFormatCurrency(safeStats.totalTarget)}`}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.divider} />
+            
+            <View style={styles.topSafeRow}>
+              <Text style={styles.topSafeLabel}>{language === 'pt-BR' ? 'Maior Cofre:' : 'Top Safe:'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.topSafeName}>{safeStats.topSafeName}</Text>
+                <Text style={styles.topSafeAmount}> ({safeFormatCurrency(safeStats.topSafeAmount)})</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Category Spending */}
       <View style={styles.categorySection}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -849,6 +937,104 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 16,
+  },
+  section: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  safesOverviewCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F39C12',
+  },
+  safesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  safesIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF4E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  safesTotalLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  safesTotalAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  progressSection: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  progressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#F39C12',
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#F39C12',
+    borderRadius: 4,
+  },
+  targetLabel: {
+    fontSize: 10,
+    color: '#999',
+    textAlign: 'right',
+  },
+  topSafeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  topSafeLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  topSafeName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+  },
+  topSafeAmount: {
+    fontSize: 12,
+    color: '#666',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 12,
   },
   statsGrid: {
     flexDirection: 'row',

@@ -237,12 +237,12 @@ export default function TransactionsScreen() {
             {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
           </View>
         )}
-      <View style={[styles.categoryIcon, { backgroundColor: item.category.color + '20' }]}> 
-        <Ionicons name={item.category.icon as any} size={20} color={item.category.color} />
+      <View style={[styles.categoryIcon, { backgroundColor: (item.category?.color || '#ccc') + '20' }]}> 
+        <Ionicons name={item.category?.icon as any || 'help-circle'} size={20} color={item.category?.color || '#ccc'} />
       </View>
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionDescription}>{item.description}</Text>
-        <Text style={styles.transactionMeta}>{item.category.name} • {new Date(item.transaction_date).toLocaleDateString()}</Text>
+        <Text style={styles.transactionMeta}>{item.category?.name || 'Uncategorized'} • {new Date(item.transaction_date).toLocaleDateString()}</Text>
       </View>
       <Text style={[
         styles.transactionAmount,
