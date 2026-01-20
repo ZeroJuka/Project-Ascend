@@ -40,7 +40,7 @@ export default function SafesScreen() {
   
   const { user } = useAuth()
   const navigation = useNavigation()
-  const { t } = useI18n() // We might need to add translations later
+  const { t } = useI18n()
 
   useEffect(() => {
     fetchSafes()
@@ -115,58 +115,60 @@ export default function SafesScreen() {
       setNewSafeInitialAmount('')
       fetchSafes()
     } catch (error) {
-      Alert.alert('Error', 'Failed to create safe')
-    }
-  }
-
-  const handleDeleteSafe = async (id: string) => {
-    Alert.alert(
-      'Delete Safe',
-      'Are you sure? Money in this safe will be considered "spent" if not moved back.', 
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-             await supabase.from('safes').delete().eq('id', id)
-             fetchSafes()
-          }
-        }
-      ]
+      Alert.alert('Error',
+      'Failed to create safe'
     )
   }
+}
 
-  return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={['#4A90E2', '#357ABD']}
-        style={styles.header}
-      >
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Safes</Text>
-          <View style={{ width: 24 }} />
+const handleDeleteSafe = async (id: string) => {
+  Alert.alert(
+    t('safes.delete.title'),
+    t('safes.delete.message'), 
+    [
+      { text: t('safes.delete.cancel'), style: 'cancel' },
+      { 
+        text: t('safes.delete.confirm'), 
+        style: 'destructive',
+        onPress: async () => {
+           await supabase.from('safes').delete().eq('id', id)
+           fetchSafes()
+        }
+      }
+    ]
+  )
+}
+
+return (
+  <View style={styles.container}>
+    <LinearGradient
+      colors={['#4A90E2', '#357ABD']}
+      style={styles.header}
+    >
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{t('safes.title')}</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <Text style={styles.headerSubtitle}>
+        {t('safes.subtitle')}
+      </Text>
+    </LinearGradient>
+
+    <ScrollView contentContainerStyle={styles.content}>
+      {loading ? (
+        <ActivityIndicator size="large" color="#4A90E2" style={{ marginTop: 40 }} />
+      ) : safes.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="shield-checkmark-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>{t('safes.empty.text')}</Text>
+          <Text style={styles.emptySubText}>
+            {t('safes.empty.subtext')}
+          </Text>
         </View>
-        <Text style={styles.headerSubtitle}>
-          Securely store money for your goals
-        </Text>
-      </LinearGradient>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#4A90E2" style={{ marginTop: 40 }} />
-        ) : safes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="shield-checkmark-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No safes created yet.</Text>
-            <Text style={styles.emptySubText}>
-              Create a safe to start saving separately from your main balance.
-            </Text>
-          </View>
-        ) : (
+      ) : (
           safes.map(safe => (
             <TouchableOpacity 
               key={safe.id} 
@@ -225,7 +227,7 @@ export default function SafesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create New Safe</Text>
+              <Text style={styles.modalTitle}>{t('safes.create.title')}</Text>
               <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -233,14 +235,14 @@ export default function SafesScreen() {
             
             <TextInput
               style={styles.input}
-              placeholder="Safe Name (e.g. House Fund)"
+              placeholder={t('safes.create.name')}
               value={newSafeName}
               onChangeText={setNewSafeName}
             />
             
             <TextInput
               style={styles.input}
-              placeholder="Target Amount (Optional)"
+              placeholder={t('safes.create.target')}
               value={newSafeTarget}
               onChangeText={setNewSafeTarget}
               keyboardType="decimal-pad"
@@ -248,7 +250,7 @@ export default function SafesScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="Initial Amount (Optional)"
+              placeholder={t('safes.create.initial')}
               value={newSafeInitialAmount}
               onChangeText={setNewSafeInitialAmount}
               keyboardType="decimal-pad"
@@ -259,7 +261,7 @@ export default function SafesScreen() {
               onPress={handleCreateSafe}
               disabled={!newSafeName}
             >
-              <Text style={styles.createButtonText}>Create Safe</Text>
+              <Text style={styles.createButtonText}>{t('safes.create.button')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -273,7 +275,7 @@ export default function SafesScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '80%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{selectedSafe?.name} History</Text>
+              <Text style={styles.modalTitle}>{selectedSafe?.name} {t('safes.history.title')}</Text>
               <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -281,7 +283,7 @@ export default function SafesScreen() {
             
             <ScrollView>
               {safeTransactions.length === 0 ? (
-                <Text style={styles.emptySubText}>No transactions found for this safe.</Text>
+                <Text style={styles.emptySubText}>{t('safes.history.empty')}</Text>
               ) : (
                 safeTransactions.map(tx => (
                   <View key={tx.id} style={styles.transactionItem}>

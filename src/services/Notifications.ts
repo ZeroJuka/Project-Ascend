@@ -98,25 +98,25 @@ export async function scheduleBillNotification(billId: string, title: string, du
   date5DaysBefore.setHours(9, 0, 0, 0) // 9 AM
 
   if (date5DaysBefore > new Date()) {
-    try {
-      await Notifications.scheduleNotificationAsync({
-        identifier: `bill-${billId}-5days`,
-        content: {
-          title: 'Bill Due Soon',
-          body: `Your bill "${title}" is due in 5 days.`,
-          data: { billId },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-          year: date5DaysBefore.getFullYear(),
-          month: date5DaysBefore.getMonth() + 1,
-          day: date5DaysBefore.getDate(),
-          hour: date5DaysBefore.getHours(),
-          minute: date5DaysBefore.getMinutes(),
-        },
-      })
-    } catch (e) {
-      console.error('Failed to schedule 5-day notification', e)
+    const seconds = Math.floor((date5DaysBefore.getTime() - Date.now()) / 1000)
+    if (seconds > 0) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `bill-${billId}-5days`,
+          content: {
+            title: 'Bill Due Soon',
+            body: `Your bill "${title}" is due in 5 days.`,
+            data: { billId },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds,
+            repeats: false,
+          },
+        })
+      } catch (e) {
+        console.error('Failed to schedule 5-day notification', e)
+      }
     }
   }
 
@@ -126,25 +126,25 @@ export async function scheduleBillNotification(billId: string, title: string, du
   date1DayBefore.setHours(9, 0, 0, 0) // 9 AM
 
   if (date1DayBefore > new Date()) {
-    try {
-      await Notifications.scheduleNotificationAsync({
-        identifier: `bill-${billId}-1day`,
-        content: {
-          title: 'Bill Due Tomorrow',
-          body: `Your bill "${title}" is due tomorrow!`,
-          data: { billId },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-          year: date1DayBefore.getFullYear(),
-          month: date1DayBefore.getMonth() + 1,
-          day: date1DayBefore.getDate(),
-          hour: date1DayBefore.getHours(),
-          minute: date1DayBefore.getMinutes(),
-        },
-      })
-    } catch (e) {
-      console.error('Failed to schedule 1-day notification', e)
+    const seconds = Math.floor((date1DayBefore.getTime() - Date.now()) / 1000)
+    if (seconds > 0) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `bill-${billId}-1day`,
+          content: {
+            title: 'Bill Due Tomorrow',
+            body: `Your bill "${title}" is due tomorrow!`,
+            data: { billId },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds,
+            repeats: false,
+          },
+        })
+      } catch (e) {
+        console.error('Failed to schedule 1-day notification', e)
+      }
     }
   }
 }

@@ -672,14 +672,14 @@ export default function DashboardScreen() {
       {/* Safes Overview */}
       {safeStats.safesCount > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Visão Geral dos Cofres' : 'Safes Overview'}</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.safes.title')}</Text>
           <View style={styles.safesOverviewCard}>
             <View style={styles.safesHeader}>
               <View style={styles.safesIconContainer}>
                 <Ionicons name="lock-closed" size={20} color="#F39C12" />
               </View>
               <View>
-                <Text style={styles.safesTotalLabel}>{language === 'pt-BR' ? 'Total Guardado' : 'Total Saved'}</Text>
+                <Text style={styles.safesTotalLabel}>{t('dashboard.safes.total_saved')}</Text>
                 <Text style={styles.safesTotalAmount}>{safeFormatCurrency(safeStats.totalSaved)}</Text>
               </View>
             </View>
@@ -687,16 +687,14 @@ export default function DashboardScreen() {
             {safeStats.totalTarget > 0 && (
               <View style={styles.progressSection}>
                 <View style={styles.progressLabels}>
-                  <Text style={styles.progressLabel}>{language === 'pt-BR' ? 'Progresso da Meta Total' : 'Total Goal Progress'}</Text>
+                  <Text style={styles.progressLabel}>{t('dashboard.safes.total_goal_progress')}</Text>
                   <Text style={styles.progressPercent}>{Math.round(safeStats.progress)}%</Text>
                 </View>
                 <View style={styles.progressBarBg}>
                   <View style={[styles.progressBarFill, { width: `${Math.min(100, safeStats.progress)}%` }]} />
                 </View>
                 <Text style={styles.targetLabel}>
-                  {language === 'pt-BR' 
-                    ? `Meta Total: ${safeFormatCurrency(safeStats.totalTarget)}`
-                    : `Total Target: ${safeFormatCurrency(safeStats.totalTarget)}`}
+                  {t('dashboard.safes.total_target')}: {safeFormatCurrency(safeStats.totalTarget)}
                 </Text>
               </View>
             )}
@@ -704,7 +702,7 @@ export default function DashboardScreen() {
             <View style={styles.divider} />
             
             <View style={styles.topSafeRow}>
-              <Text style={styles.topSafeLabel}>{language === 'pt-BR' ? 'Maior Cofre:' : 'Top Safe:'}</Text>
+              <Text style={styles.topSafeLabel}>{t('dashboard.safes.top_safe')}:</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={styles.topSafeName}>{safeStats.topSafeName}</Text>
                 <Text style={styles.topSafeAmount}> ({safeFormatCurrency(safeStats.topSafeAmount)})</Text>
@@ -721,7 +719,7 @@ export default function DashboardScreen() {
           {!!categorySpending.length && (
             <TouchableOpacity onPress={() => setShowAllCategories(prev => !prev)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#F0F0F0' }}>
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#333' }}>
-                {showAllCategories ? (language === 'pt-BR' ? 'Colapsar' : 'Collapse') : (language === 'pt-BR' ? 'Ver todos' : 'See all')}
+                {showAllCategories ? t('dashboard.category.collapse') : t('dashboard.category.see_all')}
               </Text>
             </TouchableOpacity>
           )}
@@ -753,7 +751,7 @@ export default function DashboardScreen() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={styles.sectionTitle}>{t('dashboard.insights.title')}</Text>
           <TouchableOpacity onPress={() => setShowAlerts(!showAlerts)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#F0F0F0' }}>
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#333' }}>{language === 'pt-BR' ? 'Alertas' : 'Alerts'}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#333' }}>{t('dashboard.alerts.toggle')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.insightsContainer}>
@@ -787,7 +785,7 @@ export default function DashboardScreen() {
       {/* Alerts: Category Overspending */}
       {showAlerts && overspendAlerts.length > 0 && (
         <View style={styles.alertsSection}>
-          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Alertas de Gastos por Categoria' : 'Category Overspend Alerts'}</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.alerts.title')}</Text>
           <View style={styles.alertsContainer}>
             {overspendAlerts.map((a, i) => (
               <View key={i} style={styles.alertCard}>
@@ -796,9 +794,7 @@ export default function DashboardScreen() {
                   <Text style={[styles.alertTitle, { color: '#FF6B6B' }]}>{a.category}</Text>
                 </View>
                 <Text style={styles.alertBody}>
-                  {language === 'pt-BR'
-                    ? `Acima da média: ${a.pct}% • Este mês: ${safeFormatCurrency(a.amount)}`
-                    : `Above average: ${a.pct}% • This month: ${safeFormatCurrency(a.amount)}`}
+                  {t('dashboard.alerts.above_average')}: {a.pct}% • {t('dashboard.alerts.this_month')}: {safeFormatCurrency(a.amount)}
                 </Text>
               </View>
             ))}
@@ -809,7 +805,7 @@ export default function DashboardScreen() {
       {/* Cashflow Projection Chart */}
       {yearlySteps.length > 0 && (
         <View style={styles.projectionSection}>
-          <Text style={styles.sectionTitle}>{language === 'pt-BR' ? 'Fluxo de Caixa Anual (R$)' : 'Yearly Cashflow (R$)'}</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.projection.title')}</Text>
           <View style={styles.projectionCard} onLayout={(e) => setChartWidth(Math.max(240, Math.floor(e.nativeEvent.layout.width)))}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {(() => {
@@ -870,9 +866,7 @@ export default function DashboardScreen() {
             <View style={styles.projectionFooter}>
               <Ionicons name="calendar" size={18} color="#4A90E2" />
               <Text style={styles.projectionText}>
-                {language === 'pt-BR'
-                  ? 'Fluxo de caixa anual por mês (valores acumulados)'
-                  : 'Yearly cashflow by month (cumulative values)'}
+                {t('dashboard.projection.footer')}
               </Text>
             </View>
           </View>

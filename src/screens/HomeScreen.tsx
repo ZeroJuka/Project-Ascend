@@ -297,13 +297,13 @@ export default function HomeScreen() {
                   <Ionicons name="lock-closed" size={16} color="#F39C12" />
                 </View>
                 <View>
-                  <Text style={styles.safesLabel}>Total Saved</Text>
+                  <Text style={styles.safesLabel}>{t('home.action.safes_total_saved')}</Text>
                   <Text style={styles.safesAmount}>{formatCurrency(financialData.totalSafes, language)}</Text>
                 </View>
               </View>
               
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.safesLabel}>This Month</Text>
+                <Text style={styles.safesLabel}>{t('home.this_month')}</Text>
                 <Text style={[styles.safesAmount, { fontSize: 16 }]}>+{formatCurrency(financialData.monthlySaved, language)}</Text>
               </View>
             </View>
