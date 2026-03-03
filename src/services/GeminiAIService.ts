@@ -3,7 +3,7 @@ import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 
 const GEMINI_API_KEY = Constants.expoConfig?.extra?.GEMINI_API_KEY || process.env.GEMINI_API_KEY
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent'
 
 export interface FinancialInsight {
   type: 'insight' | 'transaction' | 'goal' | 'bill' | 'batch' | 'safe_creation' | 'safe_deposit' | 'error'
@@ -109,7 +109,7 @@ export class GeminiAIService {
   }
 
   private async makeAPICallWithFallback(systemPrompt: string, message: string): Promise<Response> {
-    const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
+    const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent'
     
     return fetch(`${fallbackUrl}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
@@ -134,7 +134,7 @@ export class GeminiAIService {
   }
 
   private async makeAPICallWithSecondFallback(systemPrompt: string, message: string): Promise<Response> {
-    const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
+    const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent'
     
     return fetch(`${fallbackUrl}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
